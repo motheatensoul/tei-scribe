@@ -37,7 +37,7 @@ jobs:
       - name: install frontend dependencies
         run: bun install
        # If tagName and releaseId are omitted tauri-action will only build the app and won't try to upload any assets.
-      - uses: tauri-apps/tauri-action@v1
+      - uses: tauri-apps/tauri-action
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
