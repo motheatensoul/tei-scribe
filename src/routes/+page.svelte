@@ -167,33 +167,33 @@
     }
 </script>
 
-<div class="app">
+<div class="flex flex-col h-screen overflow-hidden bg-base-100">
     <Toolbar onopen={handleOpen} />
 
-    <div class="main-content">
+    <div class="flex-1 overflow-hidden">
         <Splitpanes>
             <Pane minSize={20}>
-                <div class="pane-content">
-                    <div class="pane-header">
+                <div class="flex flex-col h-full">
+                    <div class="flex justify-between items-center px-4 py-2 bg-base-200 border-b border-base-300 font-medium text-sm">
                         <span>DSL Editor</span>
-                        <div class="header-actions">
+                        <div class="flex gap-1">
                             <button
-                                class="icon-btn"
+                                class="btn btn-ghost btn-xs"
                                 title="Insert entity"
                                 onclick={() => (showEntityBrowser = true)}
                             >
                                 ꝥ
                             </button>
                             <button
-                                class="icon-btn"
+                                class="btn btn-ghost btn-xs"
                                 title="Manage templates"
                                 onclick={() => (showTemplateManager = true)}
                             >
                                 ⚙
                             </button>
                             <button
-                                class="icon-btn"
-                                class:has-errors={$errorCounts.error > 0}
+                                class="btn btn-ghost btn-xs"
+                                class:text-error={$errorCounts.error > 0}
                                 title="View logs"
                                 onclick={() => (showErrorPanel = true)}
                             >
@@ -215,18 +215,20 @@
     </div>
 
     {#if showTemplateManager}
-        <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-        <div class="modal-overlay" onclick={() => (showTemplateManager = false)} role="dialog">
-            <div onclick={(e) => e.stopPropagation()} role="presentation">
+        <div class="modal modal-open">
+            <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+            <div class="modal-backdrop" onclick={() => (showTemplateManager = false)}></div>
+            <div class="modal-box">
                 <TemplateManager onclose={() => (showTemplateManager = false)} />
             </div>
         </div>
     {/if}
 
     {#if showEntityBrowser}
-        <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-        <div class="modal-overlay" onclick={() => (showEntityBrowser = false)} role="dialog">
-            <div onclick={(e) => e.stopPropagation()} role="presentation">
+        <div class="modal modal-open">
+            <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+            <div class="modal-backdrop" onclick={() => (showEntityBrowser = false)}></div>
+            <div class="modal-box max-w-4xl">
                 <EntityBrowser
                     oninsert={handleEntityInsert}
                     onclose={() => (showEntityBrowser = false)}
@@ -236,9 +238,10 @@
     {/if}
 
     {#if showErrorPanel}
-        <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-        <div class="modal-overlay" onclick={() => (showErrorPanel = false)} role="dialog">
-            <div onclick={(e) => e.stopPropagation()} role="presentation">
+        <div class="modal modal-open">
+            <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+            <div class="modal-backdrop" onclick={() => (showErrorPanel = false)}></div>
+            <div class="modal-box max-w-3xl">
                 <ErrorPanel onclose={() => (showErrorPanel = false)} />
             </div>
         </div>
@@ -246,68 +249,26 @@
 </div>
 
 <style>
-    .app {
-        display: flex;
-        flex-direction: column;
-        height: 100vh;
-        overflow: hidden;
-    }
-
-    .main-content {
-        flex: 1;
-        overflow: hidden;
-    }
-
-    .main-content :global(.splitpanes) {
+    :global(.splitpanes) {
         height: 100%;
     }
 
-    .pane-content {
-        display: flex;
-        flex-direction: column;
-        height: 100%;
+    :global(.splitpanes__splitter) {
+        background-color: var(--color-base-300);
+        position: relative;
     }
 
-    .pane-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 0.5rem 1rem;
-        background: #e1e4e8;
-        border-bottom: 1px solid #d1d5da;
-        font-weight: 500;
-        font-size: 0.875rem;
+    :global(.splitpanes__splitter:hover) {
+        background-color: var(--color-primary);
     }
 
-    .header-actions {
-        display: flex;
-        gap: 0.25rem;
+    :global(.splitpanes--horizontal > .splitpanes__splitter) {
+        width: 4px;
+        cursor: col-resize;
     }
 
-    .icon-btn {
-        background: none;
-        border: none;
-        cursor: pointer;
-        font-size: 1rem;
-        padding: 0.25rem;
-        border-radius: 4px;
-    }
-
-    .icon-btn:hover {
-        background: rgba(0, 0, 0, 0.1);
-    }
-
-    .icon-btn.has-errors {
-        color: #cb2431;
-    }
-
-    .modal-overlay {
-        position: fixed;
-        inset: 0;
-        background: rgba(0, 0, 0, 0.5);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        z-index: 100;
+    :global(.splitpanes--vertical > .splitpanes__splitter) {
+        height: 4px;
+        cursor: row-resize;
     }
 </style>

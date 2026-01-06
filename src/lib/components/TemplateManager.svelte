@@ -45,178 +45,59 @@
     }
 </script>
 
-<div class="template-manager">
-    <div class="header">
-        <h2>Template Manager</h2>
-        <button class="close-btn" onclick={onclose}>×</button>
+<div>
+    <div class="flex justify-between items-center mb-4">
+        <h2 class="text-lg font-bold">Template Manager</h2>
+        <button class="btn btn-ghost btn-sm" onclick={onclose}>×</button>
     </div>
 
     {#if editingTemplate}
-        <div class="edit-form">
-            <label>
-                Name
-                <input type="text" bind:value={editingTemplate.name} />
+        <div class="flex flex-col gap-4">
+            <label class="form-control">
+                <div class="label"><span class="label-text font-medium">Name</span></div>
+                <input type="text" class="input input-bordered" bind:value={editingTemplate.name} />
             </label>
-            <label>
-                Description
-                <input type="text" bind:value={editingTemplate.description} />
+            <label class="form-control">
+                <div class="label"><span class="label-text font-medium">Description</span></div>
+                <input type="text" class="input input-bordered" bind:value={editingTemplate.description} />
             </label>
-            <label>
-                Header (TEI-XML before content)
-                <textarea rows="8" bind:value={editingTemplate.header}></textarea>
+            <label class="form-control">
+                <div class="label"><span class="label-text font-medium">Header (TEI-XML before content)</span></div>
+                <textarea class="textarea textarea-bordered font-mono text-sm h-40" bind:value={editingTemplate.header}></textarea>
             </label>
-            <label>
-                Footer (TEI-XML after content)
-                <textarea rows="4" bind:value={editingTemplate.footer}></textarea>
+            <label class="form-control">
+                <div class="label"><span class="label-text font-medium">Footer (TEI-XML after content)</span></div>
+                <textarea class="textarea textarea-bordered font-mono text-sm h-24" bind:value={editingTemplate.footer}></textarea>
             </label>
-            <label class="checkbox-label">
-                <input type="checkbox" bind:checked={editingTemplate.wordWrap} />
-                Enable word wrapping (&lt;w&gt; tags)
+            <label class="label cursor-pointer justify-start gap-2">
+                <input type="checkbox" class="checkbox checkbox-sm" bind:checked={editingTemplate.wordWrap} />
+                <span class="label-text">Enable word wrapping (&lt;w&gt; tags)</span>
             </label>
-            <label class="checkbox-label">
-                <input type="checkbox" bind:checked={editingTemplate.autoLineNumbers} />
-                Automatic line numbering (&lt;lb n="..."&gt;)
+            <label class="label cursor-pointer justify-start gap-2">
+                <input type="checkbox" class="checkbox checkbox-sm" bind:checked={editingTemplate.autoLineNumbers} />
+                <span class="label-text">Automatic line numbering (&lt;lb n="..."&gt;)</span>
             </label>
-            <label class="checkbox-label">
-                <input type="checkbox" bind:checked={editingTemplate.multiLevel} />
-                Multi-level output (MENOTA me:facs/me:dipl/me:norm)
+            <label class="label cursor-pointer justify-start gap-2">
+                <input type="checkbox" class="checkbox checkbox-sm" bind:checked={editingTemplate.multiLevel} />
+                <span class="label-text">Multi-level output (MENOTA me:facs/me:dipl/me:norm)</span>
             </label>
-            <div class="form-actions">
-                <button onclick={handleCancel}>Cancel</button>
-                <button class="primary" onclick={handleSave}>Save</button>
+            <div class="flex justify-end gap-2 mt-2">
+                <button class="btn btn-ghost" onclick={handleCancel}>Cancel</button>
+                <button class="btn btn-primary" onclick={handleSave}>Save</button>
             </div>
         </div>
     {:else}
-        <div class="template-list">
+        <div class="flex flex-col gap-2">
             {#each $templateStore.templates as template}
-                <div class="template-item">
-                    <div class="template-info">
+                <div class="flex justify-between items-center p-3 bg-base-200 rounded-lg">
+                    <div class="flex flex-col gap-1">
                         <strong>{template.name}</strong>
-                        <span>{template.description}</span>
+                        <span class="text-sm opacity-70">{template.description}</span>
                     </div>
-                    <button onclick={() => handleEdit(template)}>Edit</button>
+                    <button class="btn btn-ghost btn-sm" onclick={() => handleEdit(template)}>Edit</button>
                 </div>
             {/each}
         </div>
-        <button class="create-btn" onclick={handleCreate}>+ Create Template</button>
+        <button class="btn btn-outline w-full mt-4" onclick={handleCreate}>+ Create Template</button>
     {/if}
 </div>
-
-<style>
-    .template-manager {
-        padding: 1rem;
-        background: white;
-        border-radius: 8px;
-        max-width: 600px;
-        max-height: 80vh;
-        overflow-y: auto;
-    }
-
-    .header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 1rem;
-    }
-
-    h2 {
-        margin: 0;
-        font-size: 1.25rem;
-    }
-
-    .close-btn {
-        background: none;
-        border: none;
-        font-size: 1.5rem;
-        cursor: pointer;
-        color: #666;
-    }
-
-    .template-list {
-        display: flex;
-        flex-direction: column;
-        gap: 0.5rem;
-    }
-
-    .template-item {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 0.75rem;
-        background: #f6f8fa;
-        border-radius: 4px;
-    }
-
-    .template-info {
-        display: flex;
-        flex-direction: column;
-        gap: 0.25rem;
-    }
-
-    .template-info span {
-        font-size: 0.875rem;
-        color: #666;
-    }
-
-    .edit-form {
-        display: flex;
-        flex-direction: column;
-        gap: 1rem;
-    }
-
-    label {
-        display: flex;
-        flex-direction: column;
-        gap: 0.25rem;
-        font-weight: 500;
-    }
-
-    .checkbox-label {
-        flex-direction: row;
-        align-items: center;
-        gap: 0.5rem;
-        font-weight: normal;
-    }
-
-    .checkbox-label input {
-        width: auto;
-    }
-
-    input,
-    textarea {
-        padding: 0.5rem;
-        border: 1px solid #d1d5da;
-        border-radius: 4px;
-        font-family: inherit;
-    }
-
-    textarea {
-        font-family: monospace;
-        font-size: 0.875rem;
-    }
-
-    .form-actions {
-        display: flex;
-        justify-content: flex-end;
-        gap: 0.5rem;
-    }
-
-    button {
-        padding: 0.5rem 1rem;
-        border: 1px solid #d1d5da;
-        border-radius: 4px;
-        background: white;
-        cursor: pointer;
-    }
-
-    button.primary {
-        background: #2ea44f;
-        color: white;
-        border-color: #2ea44f;
-    }
-
-    .create-btn {
-        margin-top: 1rem;
-        width: 100%;
-    }
-</style>

@@ -73,92 +73,30 @@
     }
 </script>
 
-<div class="toolbar">
-    <div class="toolbar-group">
-        <button onclick={handleOpen} title="Open file (Ctrl+O)">Open</button>
-        <button onclick={handleSave} title="Save file (Ctrl+S)">Save</button>
-        <button onclick={handleExport} title="Export to TEI-XML">Export</button>
+<div class="navbar bg-neutral text-neutral-content px-4 min-h-12">
+    <div class="flex gap-2">
+        <button class="btn btn-primary btn-sm" onclick={handleOpen} title="Open file (Ctrl+O)">Open</button>
+        <button class="btn btn-primary btn-sm" onclick={handleSave} title="Save file (Ctrl+S)">Save</button>
+        <button class="btn btn-primary btn-sm" onclick={handleExport} title="Export to TEI-XML">Export</button>
     </div>
 
-    <div class="toolbar-group">
-        <label>
-            Template:
-            <select onchange={handleTemplateChange} value={$templateStore.active?.id ?? ''}>
-                {#each $templateStore.templates as template}
-                    <option value={template.id}>{template.name}</option>
-                {/each}
-            </select>
-        </label>
+    <div class="flex items-center gap-2 ml-4">
+        <span class="text-sm">Template:</span>
+        <select
+            class="select select-sm select-bordered bg-neutral-focus"
+            onchange={handleTemplateChange}
+            value={$templateStore.active?.id ?? ''}
+        >
+            {#each $templateStore.templates as template}
+                <option value={template.id}>{template.name}</option>
+            {/each}
+        </select>
     </div>
 
-    <div class="toolbar-file">
-        <span class="filename">{$fileName}</span>
+    <div class="ml-auto flex items-center gap-1">
+        <span class="text-sm opacity-70">{$fileName}</span>
         {#if $editor.isDirty}
-            <span class="dirty-indicator">*</span>
+            <span class="text-warning font-bold">*</span>
         {/if}
     </div>
 </div>
-
-<style>
-    .toolbar {
-        display: flex;
-        align-items: center;
-        gap: 1rem;
-        padding: 0.5rem 1rem;
-        background: #24292e;
-        color: white;
-        border-bottom: 1px solid #1b1f23;
-    }
-
-    .toolbar-group {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-    }
-
-    button {
-        padding: 0.375rem 0.75rem;
-        background: #2ea44f;
-        color: white;
-        border: none;
-        border-radius: 4px;
-        cursor: pointer;
-        font-size: 0.875rem;
-    }
-
-    button:hover {
-        background: #22863a;
-    }
-
-    label {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        font-size: 0.875rem;
-    }
-
-    select {
-        padding: 0.25rem 0.5rem;
-        border-radius: 4px;
-        border: 1px solid #444d56;
-        background: #2f363d;
-        color: white;
-    }
-
-    .toolbar-file {
-        margin-left: auto;
-        display: flex;
-        align-items: center;
-        gap: 0.25rem;
-    }
-
-    .filename {
-        font-size: 0.875rem;
-        color: #959da5;
-    }
-
-    .dirty-indicator {
-        color: #f9826c;
-        font-weight: bold;
-    }
-</style>

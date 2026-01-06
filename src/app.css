@@ -1,0 +1,124 @@
+@import 'tailwindcss';
+@plugin 'daisyui' {
+	themes: caramellatte --default, coffee --prefersdark;
+}
+
+/* Junicode font for MENOTA/MUFI medieval characters */
+@font-face {
+	font-family: 'Junicode';
+	src: url('/fonts/Junicode.woff2') format('woff2');
+	font-weight: normal;
+	font-style: normal;
+	font-display: swap;
+}
+
+@font-face {
+	font-family: 'Junicode';
+	src: url('/fonts/JunicodeVF-Italic.woff2') format('woff2');
+	font-weight: normal;
+	font-style: italic;
+	font-display: swap;
+}
+
+/* Base styles */
+html,
+body {
+	height: 100%;
+	overflow: hidden;
+}
+
+/* CodeMirror editor - theme aware */
+.cm-editor {
+	height: 100% !important;
+	background-color: var(--color-base-100) !important;
+	color: var(--color-base-content) !important;
+}
+
+.cm-scroller {
+	overflow: auto !important;
+	font-family: monospace !important;
+}
+
+.cm-content {
+	caret-color: var(--color-base-content) !important;
+}
+
+.cm-cursor {
+	border-left-color: var(--color-base-content) !important;
+}
+
+.cm-gutters {
+	background-color: var(--color-base-200) !important;
+	color: color-mix(in oklch, var(--color-base-content) 50%, transparent) !important;
+	border-right: 1px solid var(--color-base-300) !important;
+}
+
+.cm-activeLineGutter {
+	background-color: var(--color-base-300) !important;
+}
+
+.cm-activeLine {
+	background-color: color-mix(in oklch, var(--color-base-200) 50%, transparent) !important;
+}
+
+.cm-selectionBackground,
+.cm-focused .cm-selectionBackground {
+	background-color: color-mix(in oklch, var(--color-primary) 20%, transparent) !important;
+}
+
+.cm-line {
+	padding: 0 4px !important;
+}
+
+/* CodeMirror syntax highlighting - theme aware */
+.cmt-keyword {
+	color: var(--color-error);
+	font-weight: bold;
+}
+
+.cmt-string {
+	color: var(--color-primary);
+}
+
+.cmt-processing {
+	color: var(--color-info);
+}
+
+.cmt-comment {
+	color: color-mix(in oklch, var(--color-base-content) 70%, transparent);
+	font-style: italic;
+}
+
+.cmt-emphasis {
+	color: var(--color-warning);
+	font-style: italic;
+}
+
+.cmt-inserted {
+	color: var(--color-success);
+}
+
+.cmt-deleted {
+	color: var(--color-error);
+	text-decoration: line-through;
+}
+
+.cmt-changed {
+	color: var(--color-success);
+	background-color: color-mix(in oklch, var(--color-success) 15%, transparent);
+}
+
+.cmt-atom {
+	color: var(--color-info);
+	font-weight: bold;
+}
+
+.cmt-separator {
+	color: var(--color-warning);
+	font-weight: bold;
+}
+
+.cmt-gap {
+	color: var(--color-info);
+	font-style: italic;
+}

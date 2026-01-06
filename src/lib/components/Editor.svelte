@@ -28,11 +28,6 @@
                         onchange?.(content);
                     }
                 }),
-                EditorView.theme({
-                    '&': { height: '100%' },
-                    '.cm-scroller': { overflow: 'auto' },
-                    '.cm-content': { fontFamily: 'monospace' },
-                }),
             ],
         });
 
@@ -70,16 +65,10 @@
     }
 </script>
 
-<div class="editor-container" bind:this={container}></div>
+<div class="w-full h-full overflow-hidden flex-1" bind:this={container}></div>
 
 <style>
-    .editor-container {
-        width: 100%;
-        height: 100%;
-        overflow: hidden;
-    }
-
-    .editor-container :global(.cm-editor) {
+    :global(.cm-editor) {
         height: 100%;
     }
 </style>

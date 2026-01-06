@@ -4,31 +4,31 @@ import { styleTags } from '@lezer/highlight';
 import { parser } from './tei-dsl-parser.js';
 
 /**
- * TEI-DSL syntax highlighting styles
+ * TEI-DSL syntax highlighting styles using CSS classes for theme compatibility
  */
 export const teiDslHighlightStyle = HighlightStyle.define([
     // Keywords/commands like .abbr
-    { tag: tags.keyword, color: '#d73a49', fontWeight: 'bold' },
+    { tag: tags.keyword, class: 'cmt-keyword' },
     // Content in brackets [text] {text}
-    { tag: tags.string, color: '#032f62' },
+    { tag: tags.string, class: 'cmt-string' },
     // Delimiters like // ///
-    { tag: tags.processingInstruction, color: '#6f42c1' },
+    { tag: tags.processingInstruction, class: 'cmt-processing' },
     // Notes ^{...}
-    { tag: tags.comment, color: '#6a737d', fontStyle: 'italic' },
+    { tag: tags.comment, class: 'cmt-comment' },
     // Unclear ?{...}?
-    { tag: tags.emphasis, color: '#e36209', fontStyle: 'italic' },
+    { tag: tags.emphasis, class: 'cmt-emphasis' },
     // Supplied <...>
-    { tag: tags.inserted, color: '#22863a' },
+    { tag: tags.inserted, class: 'cmt-inserted' },
     // Deleted -{...}-
-    { tag: tags.deleted, color: '#cb2431', textDecoration: 'line-through' },
+    { tag: tags.deleted, class: 'cmt-deleted' },
     // Added +{...}+
-    { tag: tags.changed, color: '#22863a', backgroundColor: '#dcffe4' },
+    { tag: tags.changed, class: 'cmt-changed' },
     // Entities :name:
-    { tag: tags.atom, color: '#005cc5', fontWeight: 'bold' },
+    { tag: tags.atom, class: 'cmt-atom' },
     // Word markers ~ |
-    { tag: tags.separator, color: '#6f42c1', fontWeight: 'bold' },
+    { tag: tags.separator, class: 'cmt-separator' },
     // Gap [...]
-    { tag: tags.special(tags.string), color: '#6f42c1', fontStyle: 'italic' },
+    { tag: tags.special(tags.string), class: 'cmt-gap' },
 ]);
 
 /**

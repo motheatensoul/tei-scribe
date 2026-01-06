@@ -2,39 +2,9 @@
     let { content = '' }: { content?: string } = $props();
 </script>
 
-<div class="preview-container">
-    <div class="preview-header">
+<div class="w-full h-full flex flex-col bg-base-200">
+    <div class="px-4 py-2 bg-base-200 border-b border-base-300 font-medium text-sm">
         <span>TEI-XML Preview</span>
     </div>
-    <pre class="preview-content"><code>{content}</code></pre>
+    <pre class="flex-1 m-0 p-4 overflow-auto font-mono text-sm leading-relaxed whitespace-pre-wrap break-words"><code>{content}</code></pre>
 </div>
-
-<style>
-    .preview-container {
-        width: 100%;
-        height: 100%;
-        display: flex;
-        flex-direction: column;
-        background: #f6f8fa;
-    }
-
-    .preview-header {
-        padding: 0.5rem 1rem;
-        background: #e1e4e8;
-        border-bottom: 1px solid #d1d5da;
-        font-weight: 500;
-        font-size: 0.875rem;
-    }
-
-    .preview-content {
-        flex: 1;
-        margin: 0;
-        padding: 1rem;
-        overflow: auto;
-        font-family: monospace;
-        font-size: 0.875rem;
-        line-height: 1.5;
-        white-space: pre-wrap;
-        word-wrap: break-word;
-    }
-</style>
