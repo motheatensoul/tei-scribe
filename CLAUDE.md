@@ -40,11 +40,13 @@ tei-scribe/
 │   │   ├── commands/             # Tauri commands: parse, template, file, entities
 │   │   ├── template/manager.rs   # Template system with built-in TEI P5 & MENOTA
 │   │   ├── normalizer/           # Level dictionary for multi-level transcription
-│   │   └── entities/registry.rs  # Entity lookup system
+│   │   ├── entities/registry.rs  # Entity lookup system
+│   │   └── dictionary/           # ONP dictionary and inflection store
 │   └── tauri.conf.json
 ├── static/entities/menota.json   # ~1,980 MENOTA/MUFI character entities
 ├── static/normalizer/menota-levels.json  # Multi-level derivation mappings
-└── static/normalizer/entity-base-letters.json  # Diplomatic normalization mappings
+├── static/normalizer/entity-base-letters.json  # Diplomatic normalization mappings
+└── static/dictionary/onp-headwords.json  # ~65k ONP headwords (CC BY-SA 4.0)
 ```
 
 ## DSL Syntax Reference
@@ -106,6 +108,9 @@ Users can override any mapping via the Entity Browser's custom mapping editor.
 | `load_entities` / `get_entity` / `list_entity_names` | Entity system |
 | `load_custom_mappings` / `save_entity_mapping` / `remove_entity_mapping` | Custom entity mappings |
 | `load_settings` / `save_settings` | Settings persistence |
+| `load_onp_headwords` / `lookup_lemma` / `search_lemma_prefix` | ONP dictionary lookup |
+| `fetch_onp_full_entry` / `get_onp_entry` | Fetch full entry from ONP API |
+| `load_inflections` / `add_inflection` / `remove_inflection` | User inflection mappings |
 
 ## Key Files for Common Tasks
 
@@ -123,6 +128,12 @@ Users can override any mapping via the Entity Browser's custom mapping editor.
 - **Main UI:** `src/routes/+page.svelte`
 - **Editor component:** `src/lib/components/Editor.svelte`
 - **Syntax highlighting:** `src/lib/parser/highlighter.ts`, `src/lib/parser/tei-dsl.grammar`
+- **ONP dictionary:** `src-tauri/src/dictionary/onp.rs`
+- **Inflection store:** `src-tauri/src/dictionary/inflections.rs`
+- **Dictionary store (frontend):** `src/lib/stores/dictionary.ts`
+- **Rendered text view:** `src/lib/components/RenderedText.svelte`
+- **Lemmatizer component:** `src/lib/components/Lemmatizer.svelte`
+- **User guide:** `docs/user-guide.md`
 
 ## Current Implementation Status
 
@@ -142,9 +153,13 @@ Users can override any mapping via the Entity Browser's custom mapping editor.
 - Syntax highlighting (Lezer grammar-based)
 - Auto-preview with debounce
 - Settings persistence (fontSize, theme, autoPreview, previewDelay, activeTemplateId)
-
-**Not Yet Implemented:**
-- User documentation
+- ONP dictionary integration (~65k headwords from ELEXIS API)
+- User inflection mappings (persisted, for lemmatization)
+- Rendered text view with clickable words for lemmatization
+- Lemmatization popup with ONP search and morphological analysis
+- Diplomatic and normalized level entity resolution
+- ARIA roles for accessibility
+- User documentation (`docs/user-guide.md`)
 
 ## Testing
 
@@ -153,7 +168,7 @@ Run Rust tests with:
 cd src-tauri && cargo test
 ```
 
-51 tests cover the parser, lexer, word tokenizer, compiler, normalizer, and multi-level features.
+58 tests cover the parser, lexer, word tokenizer, compiler, normalizer, ONP dictionary, inflections, and multi-level features.
 
 ## Debugging
 

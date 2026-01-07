@@ -238,14 +238,18 @@ impl<'a> Compiler<'a> {
                     if dict.is_combining_mark(name) {
                         return String::new();
                     }
+                    // Check for entity → base letter mapping (diplomatic normalization)
+                    if let Some(base_letter) = dict.get_entity_diplomatic(name) {
+                        return self.escape_xml(base_letter);
+                    }
                 }
-                // Resolve entity to character
+                // Fallback: resolve entity to character
                 if let Some(registry) = self.entities {
                     if let Some(entity) = registry.get(name) {
                         return self.escape_xml(&entity.char);
                     }
                 }
-                // Fallback to entity reference
+                // Final fallback to entity reference
                 format!("&{};", name)
             }
             Node::Abbreviation { expansion, .. } => self.escape_xml(expansion),
@@ -287,8 +291,14 @@ impl<'a> Compiler<'a> {
                     if dict.is_combining_mark(name) {
                         return String::new();
                     }
+                    // Check for entity → base letter mapping first
+                    if let Some(base_letter) = dict.get_entity_diplomatic(name) {
+                        // Apply character normalization to the base letter
+                        let normalized = self.normalize_text(base_letter);
+                        return self.escape_xml(&normalized);
+                    }
                 }
-                // Resolve and normalize
+                // Fallback: resolve entity and normalize
                 if let Some(registry) = self.entities {
                     if let Some(entity) = registry.get(name) {
                         let normalized = self.normalize_text(&entity.char);

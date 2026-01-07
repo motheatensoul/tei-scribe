@@ -1,3 +1,4 @@
+pub mod dictionary;
 pub mod entities;
 pub mod file;
 pub mod parse;

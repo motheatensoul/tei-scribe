@@ -48,7 +48,7 @@
 <div>
     <div class="flex justify-between items-center mb-4">
         <h2 class="text-lg font-bold">Template Manager</h2>
-        <button class="btn btn-ghost btn-sm" onclick={onclose}>×</button>
+        <button class="btn btn-ghost btn-sm" onclick={onclose} aria-label="Close">×</button>
     </div>
 
     {#if editingTemplate}

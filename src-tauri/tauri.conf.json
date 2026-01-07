@@ -37,7 +37,8 @@
     ],
     "resources": [
       "../static/entities/*",
-      "../static/normalizer/*"
+      "../static/normalizer/*",
+      "../static/dictionary/*"
     ]
   }
 }

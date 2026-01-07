@@ -6,13 +6,15 @@
     import Toolbar from '$lib/components/Toolbar.svelte';
     import TemplateManager from '$lib/components/TemplateManager.svelte';
     import EntityBrowser from '$lib/components/EntityBrowser.svelte';
+    import Lemmatizer from '$lib/components/Lemmatizer.svelte';
     import ErrorPanel from '$lib/components/ErrorPanel.svelte';
     import { editor } from '$lib/stores/editor';
     import { templateStore } from '$lib/stores/template';
     import { entityStore } from '$lib/stores/entities';
     import { settings } from '$lib/stores/settings';
     import { errorStore, errorCounts } from '$lib/stores/errors';
-    import { listTemplates, compileDsl, loadEntities, loadTextFile, loadCustomMappings } from '$lib/tauri';
+    import { listTemplates, compileDsl, loadEntities, loadTextFile, loadCustomMappings, loadOnpHeadwords, loadInflections } from '$lib/tauri';
+    import { dictionaryStore, inflectionStore } from '$lib/stores/dictionary';
     import { resolveResource, appDataDir } from '@tauri-apps/api/path';
 
     let editorComponent: Editor;
@@ -20,9 +22,13 @@
     let showTemplateManager = $state(false);
     let showEntityBrowser = $state(false);
     let showErrorPanel = $state(false);
+    let showLemmatizer = $state(false);
+    let selectedWord = $state<string | null>(null);
+    let selectedWordElement = $state<HTMLElement | null>(null);
     let compileTimeout: ReturnType<typeof setTimeout>;
     let entitiesJson = $state<string | null>(null);
     let normalizerJson = $state<string | null>(null);
+    let entityMappingsJson = $state<string | null>(null);
 
     onMount(async () => {
         errorStore.info('App', 'Application starting...');
@@ -107,6 +113,7 @@
                 try {
                     errorStore.info('Entities', `Trying to load base mappings from: ${path}`);
                     const baseMappingsText = await loadTextFile(path);
+                    entityMappingsJson = baseMappingsText; // Store raw JSON for compiler
                     const baseMappingsData = JSON.parse(baseMappingsText);
                     const mappings = baseMappingsData.mappings || {};
                     const mappingsCount = Object.keys(mappings).length;
@@ -157,6 +164,39 @@
             errorStore.warning('Normalizer', 'Could not load normalizer dictionary - multi-level output may not work correctly');
         }
 
+        // Load ONP dictionary for lemmatization
+        const onpResourcePath = await resolveResource('dictionary/onp-headwords.json');
+        const onpDevPath = onpResourcePath.replace(
+            /src-tauri\/target\/[^/]+\/dictionary\/onp-headwords\.json$/,
+            'static/dictionary/onp-headwords.json'
+        );
+        const onpPaths = [onpResourcePath, onpDevPath];
+
+        dictionaryStore.setLoading();
+        for (const path of onpPaths) {
+            try {
+                errorStore.info('Dictionary', `Trying to load ONP headwords from: ${path}`);
+                const count = await loadOnpHeadwords(path);
+                errorStore.info('Dictionary', `Loaded ${count} ONP headwords from ${path}`);
+                dictionaryStore.setLoaded(count);
+                break;
+            } catch (e) {
+                errorStore.warning('Dictionary', `Failed to load from ${path}`, String(e));
+            }
+        }
+
+        // Load user inflection mappings
+        try {
+            const store = await loadInflections();
+            const count = Object.keys(store.forms).length;
+            if (count > 0) {
+                errorStore.info('Dictionary', `Loaded ${count} user inflection mappings`);
+                inflectionStore.setMappings(store.forms);
+            }
+        } catch (e) {
+            errorStore.warning('Dictionary', 'Failed to load inflection mappings', String(e));
+        }
+
         errorStore.info('App', 'Application ready');
     });
 
@@ -178,6 +218,8 @@
                             multiLevel: template.multiLevel,
                             entitiesJson: entitiesJson ?? undefined,
                             normalizerJson: normalizerJson ?? undefined,
+                            entityMappingsJson: entityMappingsJson ?? undefined,
+                            customMappings: $entityStore.customMappings,
                         }
                     );
                 } catch (e) {
@@ -199,6 +241,18 @@
     function handleEntityInsert(text: string) {
         editorComponent?.insertText(text);
         showEntityBrowser = false;
+    }
+
+    function handleWordClick(word: string, element: HTMLElement) {
+        selectedWord = word;
+        selectedWordElement = element;
+        showLemmatizer = true;
+    }
+
+    function handleLemmatizerClose() {
+        showLemmatizer = false;
+        selectedWord = null;
+        selectedWordElement = null;
     }
 </script>
 
@@ -244,7 +298,7 @@
                 </div>
             </Pane>
             <Pane minSize={20}>
-                <Preview content={previewContent} />
+                <Preview content={previewContent} onwordclick={handleWordClick} />
             </Pane>
         </Splitpanes>
     </div>
@@ -252,7 +306,7 @@
     {#if showTemplateManager}
         <div class="modal modal-open">
             <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-            <div class="modal-backdrop" onclick={() => (showTemplateManager = false)}></div>
+            <div class="modal-backdrop" role="none" onclick={() => (showTemplateManager = false)}></div>
             <div class="modal-box">
                 <TemplateManager onclose={() => (showTemplateManager = false)} />
             </div>
@@ -262,7 +316,7 @@
     {#if showEntityBrowser}
         <div class="modal modal-open">
             <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-            <div class="modal-backdrop" onclick={() => (showEntityBrowser = false)}></div>
+            <div class="modal-backdrop" role="none" onclick={() => (showEntityBrowser = false)}></div>
             <div class="modal-box max-w-4xl">
                 <EntityBrowser
                     oninsert={handleEntityInsert}
@@ -275,9 +329,19 @@
     {#if showErrorPanel}
         <div class="modal modal-open">
             <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-            <div class="modal-backdrop" onclick={() => (showErrorPanel = false)}></div>
+            <div class="modal-backdrop" role="none" onclick={() => (showErrorPanel = false)}></div>
             <div class="modal-box max-w-3xl">
                 <ErrorPanel onclose={() => (showErrorPanel = false)} />
+            </div>
+        </div>
+    {/if}
+
+    {#if showLemmatizer && selectedWord}
+        <div class="modal modal-open">
+            <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+            <div class="modal-backdrop" role="none" onclick={handleLemmatizerClose}></div>
+            <div class="modal-box max-w-2xl">
+                <Lemmatizer word={selectedWord} onclose={handleLemmatizerClose} />
             </div>
         </div>
     {/if}

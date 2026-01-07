@@ -1,6 +1,7 @@
 use crate::entities::EntityRegistry;
 use crate::normalizer::LevelDictionary;
 use crate::parser::{Compiler, CompilerConfig};
+use std::collections::HashMap;
 
 #[tauri::command]
 pub fn compile_dsl(
@@ -12,6 +13,8 @@ pub fn compile_dsl(
     multi_level: Option<bool>,
     entities_json: Option<String>,
     normalizer_json: Option<String>,
+    entity_mappings_json: Option<String>,
+    custom_mappings: Option<HashMap<String, String>>,
 ) -> Result<String, String> {
     // Load entities if provided
     let mut registry = EntityRegistry::new();
@@ -20,10 +23,21 @@ pub fn compile_dsl(
     }
 
     // Load level dictionary if provided
-    let dictionary = match normalizer_json {
+    let mut dictionary = match normalizer_json {
         Some(json) => Some(LevelDictionary::load(&json)?),
         None => None,
     };
+
+    // Load entity base letter mappings if provided
+    if let Some(ref mut dict) = dictionary {
+        if let Some(ref json) = entity_mappings_json {
+            dict.load_entity_mappings(json)?;
+        }
+        // Apply custom mappings (overrides base mappings)
+        if let Some(custom) = custom_mappings {
+            dict.add_entity_mappings(custom);
+        }
+    }
 
     // Configure compiler
     let config = CompilerConfig {

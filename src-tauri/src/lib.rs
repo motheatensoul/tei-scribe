@@ -1,15 +1,20 @@
 mod commands;
+mod dictionary;
 pub mod entities;
 mod normalizer;
 mod parser;
 mod settings;
 mod template;
 
+use commands::dictionary::OnpState;
+use std::sync::Mutex;
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        .manage(OnpState(Mutex::new(None)))
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -38,6 +43,18 @@ pub fn run() {
             commands::entities::save_entity_mapping,
             commands::entities::remove_entity_mapping,
             commands::entities::clear_custom_mappings,
+            commands::dictionary::load_onp_headwords,
+            commands::dictionary::lookup_lemma,
+            commands::dictionary::search_lemma_prefix,
+            commands::dictionary::get_onp_entry,
+            commands::dictionary::fetch_onp_full_entry,
+            commands::dictionary::load_inflections,
+            commands::dictionary::lookup_inflection,
+            commands::dictionary::add_inflection,
+            commands::dictionary::remove_inflection,
+            commands::dictionary::clear_inflections,
+            commands::dictionary::is_onp_loaded,
+            commands::dictionary::get_onp_stats,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

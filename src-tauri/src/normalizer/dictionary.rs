@@ -18,6 +18,12 @@ struct DictionaryJson {
     normalized: NormalizedConfig,
 }
 
+/// Entity base letter mappings JSON structure
+#[derive(Debug, Deserialize)]
+struct EntityMappingsJson {
+    mappings: HashMap<String, String>,
+}
+
 /// Dictionary for deriving diplomatic and normalized levels from facsimile
 #[derive(Debug, Clone)]
 pub struct LevelDictionary {
@@ -27,6 +33,8 @@ pub struct LevelDictionary {
     char_mappings: HashMap<char, String>,
     /// Ligature → expansion mappings
     ligature_mappings: HashMap<char, String>,
+    /// Entity name → diplomatic base letter mappings
+    entity_mappings: HashMap<String, String>,
 }
 
 impl LevelDictionary {
@@ -57,7 +65,28 @@ impl LevelDictionary {
             combining_marks,
             char_mappings,
             ligature_mappings,
+            entity_mappings: HashMap::new(),
         })
+    }
+
+    /// Load entity base letter mappings from JSON string
+    pub fn load_entity_mappings(&mut self, json: &str) -> Result<(), String> {
+        let parsed: EntityMappingsJson =
+            serde_json::from_str(json).map_err(|e| format!("Failed to parse entity mappings: {}", e))?;
+        self.entity_mappings = parsed.mappings;
+        Ok(())
+    }
+
+    /// Add custom entity mappings (overrides base mappings)
+    pub fn add_entity_mappings(&mut self, mappings: HashMap<String, String>) {
+        for (k, v) in mappings {
+            self.entity_mappings.insert(k, v);
+        }
+    }
+
+    /// Get the diplomatic base letter for an entity name
+    pub fn get_entity_diplomatic(&self, entity_name: &str) -> Option<&str> {
+        self.entity_mappings.get(entity_name).map(|s| s.as_str())
     }
 
     /// Check if an entity name is a combining mark (should be removed at diplomatic level)
@@ -91,6 +120,7 @@ impl Default for LevelDictionary {
             combining_marks: HashSet::new(),
             char_mappings: HashMap::new(),
             ligature_mappings: HashMap::new(),
+            entity_mappings: HashMap::new(),
         }
     }
 }

@@ -1,0 +1,227 @@
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::fs;
+use std::path::PathBuf;
+use tauri::{AppHandle, Manager};
+
+/// An inflected form with its morphological analysis
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InflectedForm {
+    /// The ONP entry ID this form belongs to
+    pub onp_id: String,
+    /// The lemma (headword)
+    pub lemma: String,
+    /// Morphological analysis (e.g., "nom.sg.f", "dat.pl.m.def")
+    pub analysis: String,
+    /// Part of speech from ONP
+    pub part_of_speech: String,
+}
+
+/// Store for user-built inflection mappings
+/// Maps wordforms to their possible lemmas and analyses
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct InflectionStore {
+    /// Map from normalized wordform to list of possible analyses
+    /// (one wordform can map to multiple lemmas, e.g., "var" could be past of "vera" or "verja")
+    forms: HashMap<String, Vec<InflectedForm>>,
+}
+
+impl InflectionStore {
+    pub fn new() -> Self {
+        Self {
+            forms: HashMap::new(),
+        }
+    }
+
+    /// Get the path to the inflections file in app data
+    fn get_path(app: &AppHandle) -> Result<PathBuf, String> {
+        let app_data = app
+            .path()
+            .app_data_dir()
+            .map_err(|e| format!("Failed to get app data dir: {}", e))?;
+        fs::create_dir_all(&app_data).map_err(|e| format!("Failed to create app data dir: {}", e))?;
+        Ok(app_data.join("inflections.json"))
+    }
+
+    /// Load inflections from app data
+    pub fn load(app: &AppHandle) -> Result<Self, String> {
+        let path = Self::get_path(app)?;
+        if !path.exists() {
+            return Ok(Self::new());
+        }
+        let content = fs::read_to_string(&path).map_err(|e| e.to_string())?;
+        serde_json::from_str(&content).map_err(|e| e.to_string())
+    }
+
+    /// Save inflections to app data
+    pub fn save(&self, app: &AppHandle) -> Result<(), String> {
+        let path = Self::get_path(app)?;
+        let content = serde_json::to_string_pretty(self).map_err(|e| e.to_string())?;
+        fs::write(&path, content).map_err(|e| e.to_string())
+    }
+
+    /// Normalize a wordform for lookup (lowercase, strip combining marks)
+    fn normalize(form: &str) -> String {
+        form.to_lowercase()
+    }
+
+    /// Add or update an inflection mapping
+    pub fn add(&mut self, wordform: &str, inflection: InflectedForm) {
+        let normalized = Self::normalize(wordform);
+        let forms = self.forms.entry(normalized).or_default();
+
+        // Check if this exact mapping already exists
+        let exists = forms.iter().any(|f| {
+            f.onp_id == inflection.onp_id && f.analysis == inflection.analysis
+        });
+
+        if !exists {
+            forms.push(inflection);
+        }
+    }
+
+    /// Remove a specific inflection mapping
+    pub fn remove(&mut self, wordform: &str, onp_id: &str, analysis: &str) {
+        let normalized = Self::normalize(wordform);
+        if let Some(forms) = self.forms.get_mut(&normalized) {
+            forms.retain(|f| !(f.onp_id == onp_id && f.analysis == analysis));
+            if forms.is_empty() {
+                self.forms.remove(&normalized);
+            }
+        }
+    }
+
+    /// Look up all possible analyses for a wordform
+    pub fn lookup(&self, wordform: &str) -> Vec<&InflectedForm> {
+        let normalized = Self::normalize(wordform);
+        self.forms
+            .get(&normalized)
+            .map(|v| v.iter().collect())
+            .unwrap_or_default()
+    }
+
+    /// Check if a wordform has any mappings
+    pub fn contains(&self, wordform: &str) -> bool {
+        let normalized = Self::normalize(wordform);
+        self.forms.contains_key(&normalized)
+    }
+
+    /// Get all stored wordforms
+    pub fn all_forms(&self) -> Vec<&String> {
+        self.forms.keys().collect()
+    }
+
+    /// Get total number of unique wordforms
+    pub fn len(&self) -> usize {
+        self.forms.len()
+    }
+
+    /// Check if store is empty
+    pub fn is_empty(&self) -> bool {
+        self.forms.is_empty()
+    }
+
+    /// Get all mappings (for export)
+    pub fn all_mappings(&self) -> &HashMap<String, Vec<InflectedForm>> {
+        &self.forms
+    }
+
+    /// Clear all mappings
+    pub fn clear(&mut self) {
+        self.forms.clear();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_add_and_lookup() {
+        let mut store = InflectionStore::new();
+
+        store.add(
+            "konur",
+            InflectedForm {
+                onp_id: "o123".to_string(),
+                lemma: "kona".to_string(),
+                analysis: "nom.pl.f".to_string(),
+                part_of_speech: "commonNoun".to_string(),
+            },
+        );
+
+        let results = store.lookup("konur");
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].lemma, "kona");
+        assert_eq!(results[0].analysis, "nom.pl.f");
+
+        // Case insensitive lookup
+        let results = store.lookup("KONUR");
+        assert_eq!(results.len(), 1);
+    }
+
+    #[test]
+    fn test_multiple_analyses() {
+        let mut store = InflectionStore::new();
+
+        // "var" can be past tense of "vera" (to be) or "verja" (to defend)
+        store.add(
+            "var",
+            InflectedForm {
+                onp_id: "o1".to_string(),
+                lemma: "vera".to_string(),
+                analysis: "pret.ind.1/3sg".to_string(),
+                part_of_speech: "verb".to_string(),
+            },
+        );
+        store.add(
+            "var",
+            InflectedForm {
+                onp_id: "o2".to_string(),
+                lemma: "verja".to_string(),
+                analysis: "pret.ind.1/3sg".to_string(),
+                part_of_speech: "verb".to_string(),
+            },
+        );
+
+        let results = store.lookup("var");
+        assert_eq!(results.len(), 2);
+    }
+
+    #[test]
+    fn test_no_duplicates() {
+        let mut store = InflectionStore::new();
+
+        let form = InflectedForm {
+            onp_id: "o123".to_string(),
+            lemma: "kona".to_string(),
+            analysis: "nom.pl.f".to_string(),
+            part_of_speech: "commonNoun".to_string(),
+        };
+
+        store.add("konur", form.clone());
+        store.add("konur", form.clone());
+
+        let results = store.lookup("konur");
+        assert_eq!(results.len(), 1);
+    }
+
+    #[test]
+    fn test_remove() {
+        let mut store = InflectionStore::new();
+
+        store.add(
+            "konur",
+            InflectedForm {
+                onp_id: "o123".to_string(),
+                lemma: "kona".to_string(),
+                analysis: "nom.pl.f".to_string(),
+                part_of_speech: "commonNoun".to_string(),
+            },
+        );
+
+        assert!(store.contains("konur"));
+        store.remove("konur", "o123", "nom.pl.f");
+        assert!(!store.contains("konur"));
+    }
+}

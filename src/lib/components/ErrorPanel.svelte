@@ -33,8 +33,8 @@
             {/if}
         </h2>
         <div class="flex gap-2">
-            <button class="btn btn-ghost btn-xs" onclick={() => errorStore.clear()}>Clear</button>
-            <button class="btn btn-ghost btn-xs" onclick={onclose}>×</button>
+            <button class="btn btn-ghost btn-xs" onclick={() => errorStore.clear()} aria-label="Clear logs">Clear</button>
+            <button class="btn btn-ghost btn-xs" onclick={onclose} aria-label="Close">×</button>
         </div>
     </div>
 

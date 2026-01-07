@@ -75,12 +75,19 @@
             handleSaveMapping(name);
         }
     }
+
+    function handleEntityKeydown(e: KeyboardEvent, name: string) {
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            handleSelect(name);
+        }
+    }
 </script>
 
 <div>
     <div class="flex justify-between items-center mb-4">
         <h2 class="text-lg font-bold">Entity Browser</h2>
-        <button class="btn btn-ghost btn-sm" onclick={onclose}>×</button>
+        <button class="btn btn-ghost btn-sm" onclick={onclose} aria-label="Close">×</button>
     </div>
 
     <div class="flex gap-2 mb-4">
@@ -103,16 +110,19 @@
     {:else if $entityStore.error}
         <div class="text-center py-8 text-error">{$entityStore.error}</div>
     {:else}
-        <div class="overflow-y-auto max-h-96 -mx-2">
+        <div class="overflow-y-auto max-h-96 -mx-2" role="listbox" aria-label="Entity list">
             {#each filteredEntities as [name, entity]}
                 {@const hasCustomMapping = name in $entityStore.customMappings}
                 {@const isSelected = selectedEntity === name}
                 <div class="border-b border-base-200 last:border-b-0">
-                    <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
                     <div
                         class="grid grid-cols-[2rem_1fr_auto] grid-rows-2 gap-x-2 gap-y-0.5 w-full p-2 text-left rounded-lg hover:bg-base-200 cursor-pointer"
+                        role="option"
+                        aria-selected={isSelected}
+                        tabindex="0"
                         class:bg-base-200={isSelected}
                         onclick={() => handleSelect(name)}
+                        onkeydown={(e) => handleEntityKeydown(e, name)}
                         title={entity.description}
                     >
                         <span class="row-span-2 text-2xl flex items-center justify-center" style="font-family: 'Junicode', serif;">{entity.char}</span>

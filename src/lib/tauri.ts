@@ -57,6 +57,8 @@ export interface CompileOptions {
     multiLevel?: boolean;
     entitiesJson?: string;
     normalizerJson?: string;
+    entityMappingsJson?: string;
+    customMappings?: Record<string, string>;
 }
 
 export async function compileDsl(
@@ -74,6 +76,8 @@ export async function compileDsl(
         multiLevel: options?.multiLevel ?? false,
         entitiesJson: options?.entitiesJson ?? null,
         normalizerJson: options?.normalizerJson ?? null,
+        entityMappingsJson: options?.entityMappingsJson ?? null,
+        customMappings: options?.customMappings ?? null,
     });
 }
 
@@ -105,4 +109,125 @@ export async function removeEntityMapping(entity: string): Promise<void> {
 
 export async function clearCustomMappings(): Promise<void> {
     return invoke('clear_custom_mappings');
+}
+
+// ONP Dictionary types and functions
+
+export interface OnpEntry {
+    release: string;
+    lemma: string;
+    lemma_mod: string;
+    language: string;
+    id: string;
+    part_of_speech: string[];
+    formats: string[];
+    citations: number;
+}
+
+export interface OnpSense {
+    definition: string;
+    key: string;
+    def: string;
+}
+
+export interface OnpFullEntry {
+    context?: string;
+    entry_type?: string;
+    language: string;
+    part_of_speech: string;
+    canonical_form: { written_rep: string };
+    citations: string;
+    canonical_url: string;
+    senses: OnpSense[];
+}
+
+export interface InflectedForm {
+    onp_id: string;
+    lemma: string;
+    analysis: string;
+    part_of_speech: string;
+}
+
+export interface InflectionStore {
+    forms: Record<string, InflectedForm[]>;
+}
+
+// Load ONP headwords from file
+export async function loadOnpHeadwords(path: string): Promise<number> {
+    return invoke('load_onp_headwords', { path });
+}
+
+// Look up lemma candidates for a wordform
+export async function lookupLemma(wordform: string): Promise<OnpEntry[]> {
+    return invoke('lookup_lemma', { wordform });
+}
+
+// Search for lemmas by prefix (autocomplete)
+export async function searchLemmaPrefix(prefix: string, limit: number = 20): Promise<OnpEntry[]> {
+    return invoke('search_lemma_prefix', { prefix, limit });
+}
+
+// Get a specific ONP entry by ID
+export async function getOnpEntry(id: string): Promise<OnpEntry | null> {
+    return invoke('get_onp_entry', { id });
+}
+
+// Fetch full entry data from ONP API
+export async function fetchOnpFullEntry(id: string): Promise<OnpFullEntry> {
+    return invoke('fetch_onp_full_entry', { id });
+}
+
+// Load user inflection mappings
+export async function loadInflections(): Promise<InflectionStore> {
+    return invoke('load_inflections');
+}
+
+// Look up inflections for a wordform
+export async function lookupInflection(wordform: string): Promise<InflectedForm[]> {
+    return invoke('lookup_inflection', { wordform });
+}
+
+// Add an inflection mapping
+export async function addInflection(
+    wordform: string,
+    onpId: string,
+    lemma: string,
+    analysis: string,
+    partOfSpeech: string
+): Promise<void> {
+    return invoke('add_inflection', {
+        wordform,
+        onp_id: onpId,
+        lemma,
+        analysis,
+        part_of_speech: partOfSpeech
+    });
+}
+
+// Remove an inflection mapping
+export async function removeInflection(
+    wordform: string,
+    onpId: string,
+    analysis: string
+): Promise<void> {
+    return invoke('remove_inflection', {
+        wordform,
+        onp_id: onpId,
+        analysis
+    });
+}
+
+// Clear all inflection mappings
+export async function clearInflections(): Promise<void> {
+    return invoke('clear_inflections');
+}
+
+// Check if ONP registry is loaded
+export async function isOnpLoaded(): Promise<boolean> {
+    return invoke('is_onp_loaded');
+}
+
+// Get ONP registry stats
+export async function getOnpStats(): Promise<[number, number]> {
+    return invoke('get_onp_stats');
 }
