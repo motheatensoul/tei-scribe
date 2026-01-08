@@ -30,6 +30,9 @@ pub enum Node {
     Entity(String),
     /// Word continuation marker: ~ (used before line/page breaks)
     WordContinuation,
+    /// Compound word join: ~ between words (upp~haf → upphaf in norm)
+    /// Outputs space in facs/dipl but joins in norm
+    CompoundJoin,
     /// Explicit word boundary marker: |
     WordBoundary,
     /// Word container (groups nodes into a single word)

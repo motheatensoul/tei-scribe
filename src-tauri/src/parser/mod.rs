@@ -6,4 +6,4 @@ mod wordtokenizer;
 #[cfg(test)]
 mod tests;
 
-pub use compiler::{Compiler, CompilerConfig};
+pub use compiler::{Compiler, CompilerConfig, LemmaMapping};

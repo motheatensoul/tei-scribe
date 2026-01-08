@@ -14,8 +14,8 @@
 
 TEI-Scribe is a Tauri desktop application for manuscript transcription using a custom DSL that compiles to TEI-XML, with specific support for MENOTA (Medieval Nordic Text Archive) extensions.
 
-**Version:** 0.0.1 (early development)
-**License:** MIT
+**Version:** 0.1.0 (alpha)
+**License:** GPL-3.0-or-later
 
 ## Tech Stack
 
@@ -111,6 +111,7 @@ Users can override any mapping via the Entity Browser's custom mapping editor.
 | `load_onp_headwords` / `lookup_lemma` / `search_lemma_prefix` | ONP dictionary lookup |
 | `fetch_onp_full_entry` / `get_onp_entry` | Fetch full entry from ONP API |
 | `load_inflections` / `add_inflection` / `remove_inflection` | User inflection mappings |
+| `save_project` / `open_project` | Project archive (.teis) save/load |
 
 ## Key Files for Common Tasks
 
@@ -133,6 +134,7 @@ Users can override any mapping via the Entity Browser's custom mapping editor.
 - **Dictionary store (frontend):** `src/lib/stores/dictionary.ts`
 - **Rendered text view:** `src/lib/components/RenderedText.svelte`
 - **Lemmatizer component:** `src/lib/components/Lemmatizer.svelte`
+- **File commands (project archive):** `src-tauri/src/commands/file.rs`
 - **User guide:** `docs/user-guide.md`
 
 ## Current Implementation Status
@@ -156,10 +158,17 @@ Users can override any mapping via the Entity Browser's custom mapping editor.
 - ONP dictionary integration (~65k headwords from ELEXIS API)
 - User inflection mappings (persisted, for lemmatization)
 - Rendered text view with clickable words for lemmatization
-- Lemmatization popup with ONP search and morphological analysis
+- Lemmatization popup with ONP search and morphological analysis (editable existing mappings)
+- Per-word-instance lemma confirmations (session-based, stored in project archive)
 - Diplomatic and normalized level entity resolution
 - ARIA roles for accessibility
+- Project archive format (.teis) bundling source, XML output, and confirmations
+- Keyboard shortcuts: Ctrl+S (save project), Ctrl+O (open project)
 - User documentation (`docs/user-guide.md`)
+
+**Not Yet Implemented:**
+- Undo/redo for lemmatization changes
+- Batch export of inflection dictionary
 
 ## Testing
 
@@ -168,7 +177,23 @@ Run Rust tests with:
 cd src-tauri && cargo test
 ```
 
-58 tests cover the parser, lexer, word tokenizer, compiler, normalizer, ONP dictionary, inflections, and multi-level features.
+66 tests cover the parser, lexer, word tokenizer, compiler, normalizer, ONP dictionary, inflections, and multi-level features.
+
+## Project Archive Format
+
+TEI-Scribe uses a `.teis` archive format (a ZIP file) to bundle all work for a manuscript:
+
+```
+project.teis (ZIP archive)
+├── source.dsl          # User's DSL transcription
+├── output.xml          # Compiled TEI-XML
+├── confirmations.json  # Per-word lemma confirmations
+└── manifest.json       # Metadata (template ID, version)
+```
+
+- **Ctrl+S**: Save project (compiles and bundles everything)
+- **Ctrl+O**: Open project (restores source and confirmations)
+- **Export XML**: Saves only the compiled TEI-XML to a separate file
 
 ## Debugging
 

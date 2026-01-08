@@ -1,19 +1,20 @@
 <script lang="ts">
     import { entityStore, type EntityMap } from '$lib/stores/entities';
-    import { getInflections } from '$lib/stores/dictionary';
+    import { getInflections, sessionLemmaStore } from '$lib/stores/dictionary';
 
     let {
         content = '',
         onwordclick,
     }: {
         content?: string;
-        onwordclick?: (word: string, element: HTMLElement) => void;
+        onwordclick?: (word: string, wordIndex: number, element: HTMLElement) => void;
     } = $props();
 
     interface TextToken {
         type: 'word' | 'punctuation' | 'linebreak' | 'pagebreak' | 'space' | 'text';
         displayText: string;  // What to show (facsimile with resolved entities)
         diplomatic?: string;  // For lemmatization lookup
+        wordIndex?: number;   // The word's index in the document (for per-instance lemmatization)
         lineNumber?: string;
         pageNumber?: string;
     }
@@ -78,7 +79,9 @@
             // Final fallback to root
             const target = body || root;
 
-            extractTokens(target, result, entityMap, entityDefs);
+            // Use a counter object to track word index across recursive calls
+            const wordCounter = { index: 0 };
+            extractTokens(target, result, entityMap, entityDefs, wordCounter);
 
             // If no tokens extracted, show a message
             if (result.length === 0) {
@@ -104,7 +107,7 @@
         return result;
     }
 
-    function extractTokens(node: Node, result: TextToken[], entityMap: Map<string, string>, entityDefs: EntityMap): void {
+    function extractTokens(node: Node, result: TextToken[], entityMap: Map<string, string>, entityDefs: EntityMap, wordCounter: { index: number }): void {
         for (const child of node.childNodes) {
             if (child.nodeType === Node.TEXT_NODE) {
                 const text = child.textContent || '';
@@ -135,11 +138,16 @@
                         // Diplomatic: resolve for lookup
                         const diplomatic = resolveEntitiesToGlyphs(diplRaw, entityMap, entityDefs).trim();
 
+                        // Track word index sequentially (matches compiler's word_index counter)
+                        const wordIndex = wordCounter.index;
+                        wordCounter.index++;
+
                         if (displayText) {
                             result.push({
                                 type: 'word',
                                 displayText,
                                 diplomatic,
+                                wordIndex,
                             });
                             result.push({ type: 'space', displayText: ' ' });
                         }
@@ -214,7 +222,7 @@
                     }
                     default:
                         // Recurse into other elements (div, p, etc.)
-                        extractTokens(el, result, entityMap, entityDefs);
+                        extractTokens(el, result, entityMap, entityDefs, wordCounter);
                 }
             }
         }
@@ -222,13 +230,19 @@
 
     function handleWordClick(token: TextToken, event: MouseEvent) {
         const target = event.currentTarget as HTMLElement;
-        // Use diplomatic form for lemmatization lookup
-        onwordclick?.(token.diplomatic || token.displayText, target);
+        // Use diplomatic form for lemmatization lookup, include word index
+        onwordclick?.(token.diplomatic || token.displayText, token.wordIndex ?? -1, target);
     }
 
     function hasKnownLemma(word: string): boolean {
         const inflections = $getInflections(word);
         return inflections.length > 0;
+    }
+
+    // Check if this specific word instance is confirmed in the session
+    function isWordConfirmed(wordIndex: number | undefined): boolean {
+        if (wordIndex === undefined || wordIndex < 0) return false;
+        return wordIndex in $sessionLemmaStore.mappings;
     }
 
     function formatLemmaTooltip(token: TextToken): string | undefined {
@@ -261,7 +275,8 @@
             <button
                 type="button"
                 class="word-token"
-                class:has-lemma={hasKnownLemma(token.diplomatic || token.displayText)}
+                class:is-confirmed={isWordConfirmed(token.wordIndex)}
+                class:has-suggestion={!isWordConfirmed(token.wordIndex) && hasKnownLemma(token.diplomatic || token.displayText)}
                 onclick={(e) => handleWordClick(token, e)}
                 title={formatLemmaTooltip(token)}
             >
@@ -316,13 +331,27 @@
         background-color: color-mix(in oklch, var(--color-primary) 10%, transparent);
     }
 
-    .word-token.has-lemma {
-        border-color: color-mix(in oklch, var(--color-success) 30%, transparent);
-    }
-
-    .word-token.has-lemma:hover {
+    /* Confirmed words - solid success styling */
+    .word-token.is-confirmed {
         border-color: var(--color-success);
         background-color: color-mix(in oklch, var(--color-success) 15%, transparent);
+    }
+
+    .word-token.is-confirmed:hover {
+        border-color: var(--color-success);
+        background-color: color-mix(in oklch, var(--color-success) 25%, transparent);
+    }
+
+    /* Unconfirmed words with suggestions - faded styling */
+    .word-token.has-suggestion {
+        border-color: color-mix(in oklch, var(--color-warning) 30%, transparent);
+        opacity: 0.75;
+    }
+
+    .word-token.has-suggestion:hover {
+        border-color: var(--color-warning);
+        background-color: color-mix(in oklch, var(--color-warning) 15%, transparent);
+        opacity: 1;
     }
 
     .punctuation {

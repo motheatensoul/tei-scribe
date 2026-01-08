@@ -6,7 +6,7 @@
         onwordclick,
     }: {
         content?: string;
-        onwordclick?: (word: string, element: HTMLElement) => void;
+        onwordclick?: (word: string, wordIndex: number, element: HTMLElement) => void;
     } = $props();
 
     let viewMode = $state<'xml' | 'rendered'>('rendered');

@@ -1,6 +1,7 @@
 <script lang="ts">
     import { onMount } from 'svelte';
     import { Splitpanes, Pane } from 'svelte-splitpanes';
+    import { open, save } from '@tauri-apps/plugin-dialog';
     import Editor from '$lib/components/Editor.svelte';
     import Preview from '$lib/components/Preview.svelte';
     import Toolbar from '$lib/components/Toolbar.svelte';
@@ -13,8 +14,8 @@
     import { entityStore } from '$lib/stores/entities';
     import { settings } from '$lib/stores/settings';
     import { errorStore, errorCounts } from '$lib/stores/errors';
-    import { listTemplates, compileDsl, loadEntities, loadTextFile, loadCustomMappings, loadOnpHeadwords, loadInflections } from '$lib/tauri';
-    import { dictionaryStore, inflectionStore } from '$lib/stores/dictionary';
+    import { listTemplates, compileDsl, loadEntities, loadTextFile, loadCustomMappings, loadOnpHeadwords, loadInflections, saveProject, openProject, exportTei, openFile } from '$lib/tauri';
+    import { dictionaryStore, inflectionStore, sessionLemmaStore } from '$lib/stores/dictionary';
     import { resolveResource, appDataDir } from '@tauri-apps/api/path';
 
     let editorComponent: Editor;
@@ -24,6 +25,7 @@
     let showErrorPanel = $state(false);
     let showLemmatizer = $state(false);
     let selectedWord = $state<string | null>(null);
+    let selectedWordIndex = $state<number>(-1);
     let selectedWordElement = $state<HTMLElement | null>(null);
     let compileTimeout: ReturnType<typeof setTimeout>;
     let entitiesJson = $state<string | null>(null);
@@ -200,38 +202,52 @@
         errorStore.info('App', 'Application ready');
     });
 
+    async function doCompile(content: string) {
+        const template = $templateStore.active;
+        if (!template) return;
+
+        try {
+            // Use session store for lemma mappings - keyed by word INDEX
+            // Only confirmed word instances get lemma attributes
+            const lemmaMappings: Record<number, { lemma: string; msa: string; normalized?: string }> = {};
+            for (const [indexStr, mapping] of Object.entries($sessionLemmaStore.mappings)) {
+                const index = parseInt(indexStr, 10);
+                lemmaMappings[index] = {
+                    lemma: mapping.lemma,
+                    msa: mapping.msa,
+                    normalized: mapping.normalized,
+                };
+            }
+
+            console.log('Compiling with session lemma mappings (by index):', lemmaMappings);
+
+            previewContent = await compileDsl(
+                content,
+                template.header,
+                template.footer,
+                {
+                    wordWrap: template.wordWrap,
+                    autoLineNumbers: template.autoLineNumbers,
+                    multiLevel: template.multiLevel,
+                    entitiesJson: entitiesJson ?? undefined,
+                    normalizerJson: normalizerJson ?? undefined,
+                    entityMappingsJson: entityMappingsJson ?? undefined,
+                    customMappings: $entityStore.customMappings,
+                    lemmaMappingsJson: Object.keys(lemmaMappings).length > 0
+                        ? JSON.stringify(lemmaMappings)
+                        : undefined,
+                }
+            );
+        } catch (e) {
+            previewContent = `Error: ${e}`;
+        }
+    }
+
     async function updatePreview(content: string) {
         if (!$settings.autoPreview) return;
 
         clearTimeout(compileTimeout);
-        compileTimeout = setTimeout(async () => {
-            const template = $templateStore.active;
-            if (template) {
-                try {
-                    previewContent = await compileDsl(
-                        content,
-                        template.header,
-                        template.footer,
-                        {
-                            wordWrap: template.wordWrap,
-                            autoLineNumbers: template.autoLineNumbers,
-                            multiLevel: template.multiLevel,
-                            entitiesJson: entitiesJson ?? undefined,
-                            normalizerJson: normalizerJson ?? undefined,
-                            entityMappingsJson: entityMappingsJson ?? undefined,
-                            customMappings: $entityStore.customMappings,
-                        }
-                    );
-                } catch (e) {
-                    previewContent = `Error: ${e}`;
-                }
-            }
-        }, $settings.previewDelay);
-    }
-
-    function handleOpen(content: string) {
-        editorComponent?.setContent(content);
-        updatePreview(content);
+        compileTimeout = setTimeout(() => doCompile(content), $settings.previewDelay);
     }
 
     function handleEditorChange(content: string) {
@@ -243,8 +259,9 @@
         showEntityBrowser = false;
     }
 
-    function handleWordClick(word: string, element: HTMLElement) {
+    function handleWordClick(word: string, wordIndex: number, element: HTMLElement) {
         selectedWord = word;
+        selectedWordIndex = wordIndex;
         selectedWordElement = element;
         showLemmatizer = true;
     }
@@ -252,12 +269,157 @@
     function handleLemmatizerClose() {
         showLemmatizer = false;
         selectedWord = null;
+        selectedWordIndex = -1;
         selectedWordElement = null;
+    }
+
+    function handleLemmatizerSave(wordIndex: number, lemma?: string, msa?: string) {
+        console.log('handleLemmatizerSave called', { wordIndex, lemma, msa });
+        console.log('Current session lemma mappings:', $sessionLemmaStore.mappings);
+        // Trigger immediate recompile to update TEI output with new lemma
+        // Use doCompile directly to bypass autoPreview check and delay
+        doCompile($editor.content);
+    }
+
+    // Project file handling
+    async function handleOpenProject() {
+        const path = await open({
+            filters: [
+                { name: 'TEI Scribe Project', extensions: ['teis'] },
+                { name: 'DSL Source', extensions: ['dsl', 'txt'] },
+            ],
+        });
+        if (!path) return;
+
+        const pathStr = path as string;
+
+        try {
+            if (pathStr.endsWith('.teis')) {
+                // Open project archive
+                const project = await openProject(pathStr);
+
+                // Restore DSL source to editor
+                editor.setFile(pathStr, project.source);
+                editorComponent?.setContent(project.source);
+
+                // Restore session confirmations
+                sessionLemmaStore.clear();
+                for (const [indexStr, mapping] of Object.entries(project.confirmations)) {
+                    const index = parseInt(indexStr, 10);
+                    sessionLemmaStore.confirm(index, mapping);
+                }
+
+                // Restore template if possible
+                const templates = $templateStore.templates;
+                const template = templates.find(t => t.id === project.manifest.template_id);
+                if (template) {
+                    templateStore.setActive(template);
+                }
+
+                // Trigger recompile
+                await doCompile(project.source);
+
+                errorStore.info('Project', `Opened project from ${pathStr}`);
+            } else {
+                // Open plain DSL file (backwards compatibility)
+                const file = await openFile(pathStr);
+                editor.setFile(file.path, file.content);
+                editorComponent?.setContent(file.content);
+
+                // Clear session confirmations for new file
+                sessionLemmaStore.clear();
+
+                await doCompile(file.content);
+
+                errorStore.info('File', `Opened DSL file from ${pathStr}`);
+            }
+        } catch (e) {
+            errorStore.error('Open', `Failed to open: ${e}`);
+        }
+    }
+
+    async function handleSaveProject() {
+        const template = $templateStore.active;
+        if (!template) {
+            errorStore.warning('Save', 'Please select a template before saving');
+            return;
+        }
+
+        // Get save path (use existing or prompt for new)
+        let path = $editor.filePath;
+        if (!path || !path.endsWith('.teis')) {
+            path = await save({
+                filters: [{ name: 'TEI Scribe Project', extensions: ['teis'] }],
+                defaultPath: path ? path.replace(/\.[^.]+$/, '.teis') : undefined,
+            });
+        }
+        if (!path) return;
+
+        try {
+            // Ensure we have fresh compiled output
+            await doCompile($editor.content);
+
+            // Serialize session confirmations
+            const confirmationsJson = JSON.stringify($sessionLemmaStore.mappings);
+
+            // Save project archive
+            await saveProject(
+                path,
+                $editor.content,
+                previewContent,
+                confirmationsJson,
+                template.id
+            );
+
+            editor.setFile(path, $editor.content);
+            errorStore.info('Project', `Saved project to ${path}`);
+        } catch (e) {
+            errorStore.error('Save', `Failed to save project: ${e}`);
+        }
+    }
+
+    async function handleExportXml() {
+        const template = $templateStore.active;
+        if (!template) {
+            errorStore.warning('Export', 'Please select a template before exporting');
+            return;
+        }
+
+        const path = await save({
+            filters: [{ name: 'TEI-XML', extensions: ['xml'] }],
+            defaultPath: $editor.filePath ? $editor.filePath.replace(/\.[^.]+$/, '.xml') : undefined,
+        });
+        if (!path) return;
+
+        try {
+            // Ensure we have fresh compiled output
+            await doCompile($editor.content);
+
+            await exportTei(path, previewContent);
+            errorStore.info('Export', `Exported TEI-XML to ${path}`);
+        } catch (e) {
+            errorStore.error('Export', `Failed to export: ${e}`);
+        }
+    }
+
+    // Keyboard shortcuts
+    function handleKeydown(event: KeyboardEvent) {
+        if (event.ctrlKey || event.metaKey) {
+            if (event.key === 's') {
+                event.preventDefault();
+                handleSaveProject();
+            } else if (event.key === 'o') {
+                event.preventDefault();
+                handleOpenProject();
+            }
+        }
     }
 </script>
 
+<svelte:window on:keydown={handleKeydown} />
+
 <div class="flex flex-col h-screen overflow-hidden bg-base-100">
-    <Toolbar onopen={handleOpen} />
+    <Toolbar onopen={handleOpenProject} onsave={handleSaveProject} onexportxml={handleExportXml} />
 
     <div class="flex-1 overflow-hidden">
         <Splitpanes theme="themed">
@@ -336,12 +498,12 @@
         </div>
     {/if}
 
-    {#if showLemmatizer && selectedWord}
+    {#if showLemmatizer && selectedWord && selectedWordIndex >= 0}
         <div class="modal modal-open">
             <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
             <div class="modal-backdrop" role="none" onclick={handleLemmatizerClose}></div>
             <div class="modal-box max-w-2xl">
-                <Lemmatizer word={selectedWord} onclose={handleLemmatizerClose} />
+                <Lemmatizer word={selectedWord} wordIndex={selectedWordIndex} onclose={handleLemmatizerClose} onsave={handleLemmatizerSave} />
             </div>
         </div>
     {/if}

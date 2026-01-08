@@ -141,3 +141,69 @@ export const getInflections = derived(inflectionStore, ($store) => {
         return $store.mappings[wordform.toLowerCase()] || [];
     };
 });
+
+// Session-based lemmatization store (keyed by word INDEX, not persisted)
+// This tracks which specific word instances have been manually confirmed
+export interface SessionLemmaMapping {
+    lemma: string;
+    msa: string;
+    normalized?: string;
+}
+
+interface SessionLemmaStoreState {
+    // Map from word index to confirmed lemma mapping
+    mappings: Record<number, SessionLemmaMapping>;
+}
+
+function createSessionLemmaStore() {
+    const { subscribe, set, update } = writable<SessionLemmaStoreState>({
+        mappings: {},
+    });
+
+    return {
+        subscribe,
+        // Confirm a lemmatization for a specific word index
+        confirm: (wordIndex: number, mapping: SessionLemmaMapping) =>
+            update((state) => ({
+                ...state,
+                mappings: {
+                    ...state.mappings,
+                    [wordIndex]: mapping,
+                },
+            })),
+        // Remove confirmation for a word index
+        unconfirm: (wordIndex: number) =>
+            update((state) => {
+                const newMappings = { ...state.mappings };
+                delete newMappings[wordIndex];
+                return { ...state, mappings: newMappings };
+            }),
+        // Check if a word index has been confirmed
+        isConfirmed: (wordIndex: number): boolean => {
+            let result = false;
+            subscribe((state) => {
+                result = wordIndex in state.mappings;
+            })();
+            return result;
+        },
+        // Get mapping for a word index
+        getMapping: (wordIndex: number): SessionLemmaMapping | undefined => {
+            let result: SessionLemmaMapping | undefined;
+            subscribe((state) => {
+                result = state.mappings[wordIndex];
+            })();
+            return result;
+        },
+        // Clear all session mappings (e.g., when opening a new file)
+        clear: () => set({ mappings: {} }),
+    };
+}
+
+export const sessionLemmaStore = createSessionLemmaStore();
+
+// Derived store: check if a word index has a confirmed lemmatization
+export const isWordConfirmed = derived(sessionLemmaStore, ($store) => {
+    return (wordIndex: number): boolean => {
+        return wordIndex in $store.mappings;
+    };
+});

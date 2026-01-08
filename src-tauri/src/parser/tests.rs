@@ -1,7 +1,8 @@
 use super::ast::Node;
-use super::compiler::{Compiler, CompilerConfig};
+use super::compiler::{Compiler, CompilerConfig, LemmaMapping};
 use super::lexer::Lexer;
 use super::wordtokenizer::WordTokenizer;
+use std::collections::HashMap;
 
 // ============================================================================
 // Lexer Tests
@@ -490,11 +491,11 @@ fn test_compiler_multi_level_abbreviation() {
     let mut compiler = Compiler::new().with_config(config);
     let result = compiler.compile(".abbr[dr]{doctor}").unwrap();
 
-    // Facsimile shows abbreviated form
-    assert!(result.contains("<me:facs>dr</me:facs>"));
-    // Diplomatic and normalized show expansion
-    assert!(result.contains("<me:dipl>doctor</me:dipl>"));
-    assert!(result.contains("<me:norm>doctor</me:norm>"));
+    // Facsimile shows abbreviated form wrapped in <abbr>
+    assert!(result.contains("<me:facs><abbr>dr</abbr></me:facs>"));
+    // Diplomatic and normalized show expansion wrapped in <expan>
+    assert!(result.contains("<me:dipl><expan>doctor</expan></me:dipl>"));
+    assert!(result.contains("<me:norm><expan>doctor</expan></me:norm>"));
 }
 
 #[test]
@@ -512,4 +513,185 @@ fn test_compiler_multi_level_entity() {
     // Without entities registry, diplomatic and normalized fall back to entity reference
     assert!(result.contains("<me:dipl>&eth;</me:dipl>"));
     assert!(result.contains("<me:norm>&eth;</me:norm>"));
+}
+
+// ============================================================================
+// Lemma Attribute Tests
+// ============================================================================
+
+#[test]
+fn test_compiler_lemma_attributes_single_level() {
+    let config = CompilerConfig {
+        word_wrap: true,
+        auto_line_numbers: false,
+        multi_level: false,
+    };
+    let mut mappings = HashMap::new();
+    // Now keyed by word INDEX (0 = first word)
+    mappings.insert(
+        0u32,
+        LemmaMapping {
+            lemma: "kona".to_string(),
+            msa: "xNC cN nP gF".to_string(),
+            normalized: None,
+        },
+    );
+
+    let mut compiler = Compiler::new()
+        .with_config(config)
+        .with_lemma_mappings(mappings);
+    let result = compiler.compile("konur").unwrap();
+
+    // Should have lemma attributes
+    assert!(result.contains(r#"lemma="kona""#));
+    assert!(result.contains(r#"me:msa="xNC cN nP gF""#));
+}
+
+#[test]
+fn test_compiler_lemma_attributes_multi_level() {
+    let config = CompilerConfig {
+        word_wrap: true,
+        auto_line_numbers: false,
+        multi_level: true,
+    };
+    let mut mappings = HashMap::new();
+    // Now keyed by word INDEX (0 = first word)
+    mappings.insert(
+        0u32,
+        LemmaMapping {
+            lemma: "vera".to_string(),
+            msa: "xVB fF p3 nS tPT mIN vA".to_string(),
+            normalized: None,
+        },
+    );
+
+    let mut compiler = Compiler::new()
+        .with_config(config)
+        .with_lemma_mappings(mappings);
+    let result = compiler.compile("var").unwrap();
+
+    // Should have lemma/msa attributes on <w>
+    assert!(result.contains(r#"lemma="vera""#));
+    assert!(result.contains(r#"me:msa="xVB fF p3 nS tPT mIN vA""#));
+    assert!(result.contains("<me:facs>var</me:facs>"));
+}
+
+#[test]
+fn test_compiler_lemma_only_for_confirmed_index() {
+    // Test that lemma is only applied to the SPECIFIC word index, not all matching wordforms
+    let config = CompilerConfig {
+        word_wrap: true,
+        auto_line_numbers: false,
+        multi_level: false,
+    };
+    let mut mappings = HashMap::new();
+    // Only confirm word at index 0 (first "kona")
+    mappings.insert(
+        0u32,
+        LemmaMapping {
+            lemma: "kona".to_string(),
+            msa: "xNC cN nS gF".to_string(),
+            normalized: None,
+        },
+    );
+
+    let mut compiler = Compiler::new()
+        .with_config(config)
+        .with_lemma_mappings(mappings);
+    // Two instances of "kona" - only first should have lemma
+    let result = compiler.compile("kona kona").unwrap();
+
+    // First word (index 0) should have lemma
+    assert!(result.contains(r#"<w lemma="kona" me:msa="xNC cN nS gF">kona</w>"#));
+    // Second word (index 1) should NOT have lemma
+    assert!(result.contains("<w>kona</w>"));
+}
+
+#[test]
+fn test_compiler_lemma_attributes_no_mapping() {
+    let config = CompilerConfig {
+        word_wrap: true,
+        auto_line_numbers: false,
+        multi_level: false,
+    };
+    let mappings = HashMap::new(); // Empty mappings
+
+    let mut compiler = Compiler::new()
+        .with_config(config)
+        .with_lemma_mappings(mappings);
+    let result = compiler.compile("unknown").unwrap();
+
+    // Should NOT have lemma or msa attributes
+    assert!(result.contains("<w>unknown</w>"));
+    assert!(!result.contains("lemma="));
+    assert!(!result.contains("me:msa="));
+}
+
+#[test]
+fn test_compiler_lemma_attributes_escaping() {
+    let config = CompilerConfig {
+        word_wrap: true,
+        auto_line_numbers: false,
+        multi_level: false,
+    };
+    let mut mappings = HashMap::new();
+    mappings.insert(
+        0u32,
+        LemmaMapping {
+            lemma: "test & <special>".to_string(),
+            msa: "xNC".to_string(),
+            normalized: None,
+        },
+    );
+
+    let mut compiler = Compiler::new()
+        .with_config(config)
+        .with_lemma_mappings(mappings);
+    let result = compiler.compile("test").unwrap();
+
+    // Special characters in lemma should be escaped
+    assert!(result.contains("&amp;"));
+    assert!(result.contains("&lt;"));
+}
+
+#[test]
+fn test_lexer_compound_join() {
+    let mut lexer = Lexer::new("upp~haf");
+    let doc = lexer.parse().unwrap();
+    assert_eq!(doc.nodes.len(), 3);
+    assert!(matches!(&doc.nodes[0], Node::Text(t) if t == "upp"));
+    assert!(matches!(&doc.nodes[1], Node::CompoundJoin));
+    assert!(matches!(&doc.nodes[2], Node::Text(t) if t == "haf"));
+}
+
+#[test]
+fn test_compiler_compound_join_single_level() {
+    let config = CompilerConfig {
+        word_wrap: true,
+        auto_line_numbers: false,
+        multi_level: false,
+    };
+
+    let mut compiler = Compiler::new().with_config(config);
+    let result = compiler.compile("upp~haf").unwrap();
+
+    // In single level, compound join shows space
+    assert!(result.contains("<w>upp haf</w>"));
+}
+
+#[test]
+fn test_compiler_compound_join_multi_level() {
+    let config = CompilerConfig {
+        word_wrap: true,
+        auto_line_numbers: false,
+        multi_level: true,
+    };
+
+    let mut compiler = Compiler::new().with_config(config);
+    let result = compiler.compile("upp~haf").unwrap();
+
+    // Facsimile and diplomatic show space, normalized joins
+    assert!(result.contains("<me:facs>upp haf</me:facs>"));
+    assert!(result.contains("<me:dipl>upp haf</me:dipl>"));
+    assert!(result.contains("<me:norm>upphaf</me:norm>"));
 }

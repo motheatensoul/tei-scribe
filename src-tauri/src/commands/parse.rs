@@ -1,6 +1,6 @@
 use crate::entities::EntityRegistry;
 use crate::normalizer::LevelDictionary;
-use crate::parser::{Compiler, CompilerConfig};
+use crate::parser::{Compiler, CompilerConfig, LemmaMapping};
 use std::collections::HashMap;
 
 #[tauri::command]
@@ -15,6 +15,7 @@ pub fn compile_dsl(
     normalizer_json: Option<String>,
     entity_mappings_json: Option<String>,
     custom_mappings: Option<HashMap<String, String>>,
+    lemma_mappings_json: Option<String>,
 ) -> Result<String, String> {
     // Load entities if provided
     let mut registry = EntityRegistry::new();
@@ -39,6 +40,12 @@ pub fn compile_dsl(
         }
     }
 
+    // Parse lemma mappings if provided (keyed by word INDEX)
+    let lemma_mappings: HashMap<u32, LemmaMapping> = match lemma_mappings_json {
+        Some(json) => serde_json::from_str(&json).map_err(|e| format!("Failed to parse lemma mappings: {}", e))?,
+        None => HashMap::new(),
+    };
+
     // Configure compiler
     let config = CompilerConfig {
         word_wrap: word_wrap.unwrap_or(false),
@@ -48,7 +55,8 @@ pub fn compile_dsl(
 
     let mut compiler = Compiler::new()
         .with_entities(&registry)
-        .with_config(config);
+        .with_config(config)
+        .with_lemma_mappings(lemma_mappings);
 
     // Add dictionary if available
     if let Some(ref dict) = dictionary {

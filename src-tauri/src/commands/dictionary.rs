@@ -94,7 +94,7 @@ pub fn lookup_inflection(app: AppHandle, wordform: String) -> Result<Vec<Inflect
 }
 
 /// Add an inflection mapping
-#[tauri::command]
+#[tauri::command(rename_all = "camelCase")]
 pub fn add_inflection(
     app: AppHandle,
     wordform: String,
@@ -102,10 +102,11 @@ pub fn add_inflection(
     lemma: String,
     analysis: String,
     part_of_speech: String,
+    normalized: Option<String>,
 ) -> Result<(), String> {
     info!(
-        "Adding inflection: {} -> {} ({})",
-        wordform, lemma, analysis
+        "Adding inflection: {} -> {} ({}) [norm: {:?}]",
+        wordform, lemma, analysis, normalized
     );
 
     let mut store = InflectionStore::load(&app)?;
@@ -116,13 +117,14 @@ pub fn add_inflection(
             lemma,
             analysis,
             part_of_speech,
+            normalized,
         },
     );
     store.save(&app)
 }
 
 /// Remove an inflection mapping
-#[tauri::command]
+#[tauri::command(rename_all = "camelCase")]
 pub fn remove_inflection(
     app: AppHandle,
     wordform: String,

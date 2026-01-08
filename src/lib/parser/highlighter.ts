@@ -74,8 +74,9 @@ const parserWithMetadata = parser.configure({
             // Entity
             Entity: tags.atom,
 
-            // Word boundary
+            // Word boundary and compound join
             WordBoundary: tags.separator,
+            CompoundJoin: tags.separator,
         }),
     ],
 });

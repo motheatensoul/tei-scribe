@@ -1,16 +1,23 @@
-# TEI Scribe
+# TEI-Scribe
 
-## Overview
+A desktop application for scholarly manuscript transcription, producing TEI-XML with MENOTA (Medieval Nordic Text Archive) extensions.
 
-TEI-Scribe is a Tauri desktop application for manuscript transcription using a custom DSL that compiles to TEI-XML, with specific support for MENOTA (Medieval Nordic Text Archive) extensions.
+**Version:** 0.1.0 (alpha)
 
+## Features
+
+- **Custom DSL**: Concise notation for transcription that compiles to TEI-XML
+- **Multi-level transcription**: MENOTA-compliant facsimile, diplomatic, and normalized levels
+- **Entity browser**: ~1,980 MENOTA/MUFI characters with customizable diplomatic mappings
+- **Lemmatization**: ONP dictionary integration with morphological analysis (me:msa)
+- **Project archives**: Bundle source, compiled XML, and lemma confirmations in .teis files
+- **Real-time preview**: See rendered text or XML as you type
 
 ## Tech Stack
 
-- **Frontend:** Svelte 5 + SvelteKit, TypeScript, CodeMirror 6, svelte-splitpanes
+- **Frontend:** Svelte 5, TypeScript, CodeMirror 6
 - **Backend:** Rust + Tauri 2.9
-
-The project uses a custom domain-specific language as shorthand, which is compiled into TEI-compliant XML.
+- **Package Manager:** bun
 
 ## DSL Syntax Reference
 
@@ -33,15 +40,32 @@ The project uses a custom domain-specific language as shorthand, which is compil
 | `~//` | (continuation + lb) | Word continues across line break |
 | `~///n` | (continuation + pb) | Word continues across page break |
 
-## Building
+## Installation
 
-As the project is currently in development, the main way of running the app is building the app yourself:
+As the project is currently in alpha, you'll need to build from source:
 
-`$ git clone https://github.com/motheatensoul/tei-scribe`
+```bash
+git clone https://github.com/motheatensoul/tei-scribe
+cd tei-scribe
+bun install
+bun run tauri dev    # Development mode
+bun run tauri build  # Production build
+```
 
-and
+## Keyboard Shortcuts
 
-`$ bun run tauri:dev`
+| Shortcut | Action |
+|----------|--------|
+| Ctrl+S | Save project (.teis archive) |
+| Ctrl+O | Open project or DSL file |
+
+## Documentation
+
+See `docs/user-guide.md` for detailed usage instructions including:
+- DSL syntax reference
+- Entity browser and custom mappings
+- Lemmatization workflow
+- Template configuration
 
 ## License
 

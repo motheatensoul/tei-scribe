@@ -3,6 +3,8 @@ use super::lexer::Lexer;
 use super::wordtokenizer::WordTokenizer;
 use crate::entities::EntityRegistry;
 use crate::normalizer::LevelDictionary;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// Configuration for the compiler
 #[derive(Debug, Clone, Default)]
@@ -12,12 +14,25 @@ pub struct CompilerConfig {
     pub multi_level: bool,
 }
 
+/// A lemma mapping for a wordform
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LemmaMapping {
+    pub lemma: String,
+    pub msa: String,
+    #[serde(default)]
+    pub normalized: Option<String>,
+}
+
 /// Compiles DSL input into TEI-XML
 pub struct Compiler<'a> {
     entities: Option<&'a EntityRegistry>,
     dictionary: Option<&'a LevelDictionary>,
+    /// Lemma mappings by word INDEX (for confirmed instances only)
+    lemma_mappings: HashMap<u32, LemmaMapping>,
     config: CompilerConfig,
     line_number: u32,
+    /// Current word index counter
+    word_index: u32,
 }
 
 impl<'a> Compiler<'a> {
@@ -25,8 +40,10 @@ impl<'a> Compiler<'a> {
         Self {
             entities: None,
             dictionary: None,
+            lemma_mappings: HashMap::new(),
             config: CompilerConfig::default(),
             line_number: 0,
+            word_index: 0,
         }
     }
 
@@ -37,6 +54,12 @@ impl<'a> Compiler<'a> {
 
     pub fn with_dictionary(mut self, dictionary: &'a LevelDictionary) -> Self {
         self.dictionary = Some(dictionary);
+        self
+    }
+
+    /// Set lemma mappings by word INDEX (for confirmed word instances)
+    pub fn with_lemma_mappings(mut self, mappings: HashMap<u32, LemmaMapping>) -> Self {
+        self.lemma_mappings = mappings;
         self
     }
 
@@ -56,8 +79,9 @@ impl<'a> Compiler<'a> {
             doc.nodes
         };
 
-        // Reset line counter for each compilation
+        // Reset counters for each compilation
         self.line_number = 0;
+        self.word_index = 0;
 
         let mut output = String::new();
         for node in &nodes {
@@ -108,6 +132,7 @@ impl<'a> Compiler<'a> {
             Node::Entity(name) => self.compile_entity(name),
             Node::WordContinuation => String::new(), // Consumed by word tokenizer
             Node::WordBoundary => String::new(),     // Consumed by word tokenizer
+            Node::CompoundJoin => " ".to_string(),   // Space in single-level mode
             Node::Word(children) => self.compile_word(children),
             Node::Punctuation(children) => self.compile_punctuation(children),
         }
@@ -135,23 +160,62 @@ impl<'a> Compiler<'a> {
         if content.is_empty() {
             String::new()
         } else {
-            format!("<w>{}</w>\n", content)
+            // Get current word index and increment
+            let current_index = self.word_index;
+            self.word_index += 1;
+
+            // Lookup by word INDEX (only confirmed instances have mappings)
+            let attrs = self.get_lemma_attributes_by_index(current_index);
+            format!("<w{}>{}</w>\n", attrs, content)
         }
     }
 
     fn compile_word_multi_level(&mut self, children: &[Node]) -> String {
         let facs = self.nodes_to_facs(children);
         let dipl = self.nodes_to_diplomatic(children);
-        let norm = self.nodes_to_normalized(children);
+
+        // Get current word index and increment
+        let current_index = self.word_index;
+        self.word_index += 1;
+
+        // Check if we have a user-provided normalized form (by index)
+        let norm = if let Some(stored_norm) = self.get_stored_normalized_by_index(current_index) {
+            self.escape_xml(&stored_norm)
+        } else {
+            // Fall back to auto-generated normalization
+            self.nodes_to_normalized(children)
+        };
 
         if facs.is_empty() && dipl.is_empty() && norm.is_empty() {
             String::new()
         } else {
+            // Lookup by word INDEX (only confirmed instances have mappings)
+            let attrs = self.get_lemma_attributes_by_index(current_index);
             format!(
-                "<w>\n  <me:facs>{}</me:facs>\n  <me:dipl>{}</me:dipl>\n  <me:norm>{}</me:norm>\n</w>\n",
-                facs, dipl, norm
+                "<w{}>\n  <me:facs>{}</me:facs>\n  <me:dipl>{}</me:dipl>\n  <me:norm>{}</me:norm>\n</w>\n",
+                attrs, facs, dipl, norm
             )
         }
+    }
+
+    /// Get lemma and me:msa attributes for a word by INDEX
+    fn get_lemma_attributes_by_index(&self, word_index: u32) -> String {
+        if let Some(mapping) = self.lemma_mappings.get(&word_index) {
+            format!(
+                " lemma=\"{}\" me:msa=\"{}\"",
+                self.escape_xml(&mapping.lemma),
+                self.escape_xml(&mapping.msa)
+            )
+        } else {
+            String::new()
+        }
+    }
+
+    /// Get stored normalized form for a word by INDEX
+    fn get_stored_normalized_by_index(&self, word_index: u32) -> Option<String> {
+        self.lemma_mappings
+            .get(&word_index)
+            .and_then(|m| m.normalized.clone())
     }
 
     fn compile_punctuation(&mut self, children: &[Node]) -> String {
@@ -202,7 +266,7 @@ impl<'a> Compiler<'a> {
         match node {
             Node::Text(text) => self.escape_xml(text),
             Node::Entity(name) => format!("&{};", name),
-            Node::Abbreviation { abbr, .. } => self.escape_xml(abbr),
+            Node::Abbreviation { abbr, .. } => format!("<abbr>{}</abbr>", self.escape_xml(abbr)),
             Node::Unclear(text) => format!("<unclear>{}</unclear>", self.escape_xml(text)),
             Node::Gap { quantity, .. } => {
                 // Facsimile shows gap only, not supplied
@@ -215,6 +279,7 @@ impl<'a> Compiler<'a> {
             Node::Deletion(text) => format!("<del>{}</del>", self.escape_xml(text)),
             Node::Addition(text) => format!("<add>{}</add>", self.escape_xml(text)),
             Node::Note(text) => format!("<note>{}</note>", self.escape_xml(text)),
+            Node::CompoundJoin => " ".to_string(), // Space in facsimile
             Node::LineBreak(_) | Node::PageBreak(_) => String::new(), // Handled outside word
             _ => String::new(),
         }
@@ -252,7 +317,7 @@ impl<'a> Compiler<'a> {
                 // Final fallback to entity reference
                 format!("&{};", name)
             }
-            Node::Abbreviation { expansion, .. } => self.escape_xml(expansion),
+            Node::Abbreviation { expansion, .. } => format!("<expan>{}</expan>", self.escape_xml(expansion)),
             Node::Unclear(text) => format!("<unclear>{}</unclear>", self.escape_xml(text)),
             Node::Gap { supplied, .. } => {
                 // Diplomatic shows supplied text if available
@@ -265,6 +330,7 @@ impl<'a> Compiler<'a> {
             Node::Deletion(text) => format!("<del>{}</del>", self.escape_xml(text)),
             Node::Addition(text) => format!("<add>{}</add>", self.escape_xml(text)),
             Node::Note(text) => format!("<note>{}</note>", self.escape_xml(text)),
+            Node::CompoundJoin => " ".to_string(), // Space in diplomatic
             Node::LineBreak(_) | Node::PageBreak(_) => String::new(),
             _ => String::new(),
         }
@@ -309,7 +375,7 @@ impl<'a> Compiler<'a> {
             }
             Node::Abbreviation { expansion, .. } => {
                 let normalized = self.normalize_text(expansion);
-                self.escape_xml(&normalized)
+                format!("<expan>{}</expan>", self.escape_xml(&normalized))
             }
             Node::Unclear(text) => {
                 let normalized = self.normalize_text(text);
@@ -340,6 +406,7 @@ impl<'a> Compiler<'a> {
                 let normalized = self.normalize_text(text);
                 format!("<note>{}</note>", self.escape_xml(&normalized))
             }
+            Node::CompoundJoin => String::new(), // Join parts in normalized (no space)
             Node::LineBreak(_) | Node::PageBreak(_) => String::new(),
             _ => String::new(),
         }

@@ -30,6 +30,8 @@ pub fn run() {
             commands::file::save_file,
             commands::file::export_tei,
             commands::file::load_text_file,
+            commands::file::save_project,
+            commands::file::open_project,
             commands::template::list_templates,
             commands::template::get_template,
             commands::template::save_template,

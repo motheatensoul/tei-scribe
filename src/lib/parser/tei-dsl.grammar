@@ -17,6 +17,7 @@ element {
   Unclear |
   Entity |
   WordBoundary |
+  CompoundJoin |
   Text
 }
 
@@ -58,6 +59,9 @@ Entity { entity }
 
 // | word boundary marker
 WordBoundary { wordBoundary }
+
+// ~ compound join marker (for words that span spaces, e.g., upp~haf → upphaf in norm)
+CompoundJoin { compoundJoin }
 
 // Plain text (anything else)
 Text { text }
@@ -120,13 +124,15 @@ BraceContent { braceContent }
   // Word boundary
   wordBoundary { "|" }
 
+  // Compound join (standalone ~, not followed by //)
+  compoundJoin { "~" }
+
   // Plain text - everything else except special starting chars
   // Each alternative handles a special char that doesn't start its construct
   text {
     ![/<\-+^?:|~\[.]+ |  // Normal text (no special chars)
     "." ![a] | "." |     // Period (not before 'a' for .abbr, or at end)
     "/" ![/] |           // Slash not followed by another slash
-    "~" ![/] |           // Tilde not followed by slashes
     "-" ![{] |           // Dash not followed by brace
     "+" ![{] |           // Plus not followed by brace
     "?" ![{] |           // Question mark not followed by brace
@@ -148,6 +154,7 @@ BraceContent { braceContent }
     unclearOpen,
     suppliedOpen,
     wordBoundary,
+    compoundJoin,
     text
   }
 }

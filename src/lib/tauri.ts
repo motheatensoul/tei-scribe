@@ -59,6 +59,7 @@ export interface CompileOptions {
     normalizerJson?: string;
     entityMappingsJson?: string;
     customMappings?: Record<string, string>;
+    lemmaMappingsJson?: string;
 }
 
 export async function compileDsl(
@@ -78,6 +79,7 @@ export async function compileDsl(
         normalizerJson: options?.normalizerJson ?? null,
         entityMappingsJson: options?.entityMappingsJson ?? null,
         customMappings: options?.customMappings ?? null,
+        lemmaMappingsJson: options?.lemmaMappingsJson ?? null,
     });
 }
 
@@ -146,6 +148,7 @@ export interface InflectedForm {
     lemma: string;
     analysis: string;
     part_of_speech: string;
+    normalized?: string;
 }
 
 export interface InflectionStore {
@@ -193,14 +196,16 @@ export async function addInflection(
     onpId: string,
     lemma: string,
     analysis: string,
-    partOfSpeech: string
+    partOfSpeech: string,
+    normalized?: string
 ): Promise<void> {
     return invoke('add_inflection', {
         wordform,
-        onp_id: onpId,
+        onpId,
         lemma,
         analysis,
-        part_of_speech: partOfSpeech
+        partOfSpeech,
+        normalized: normalized || null,
     });
 }
 
@@ -212,7 +217,7 @@ export async function removeInflection(
 ): Promise<void> {
     return invoke('remove_inflection', {
         wordform,
-        onp_id: onpId,
+        onpId,
         analysis
     });
 }
@@ -230,4 +235,48 @@ export async function isOnpLoaded(): Promise<boolean> {
 // Get ONP registry stats
 export async function getOnpStats(): Promise<[number, number]> {
     return invoke('get_onp_stats');
+}
+
+// Project archive types and functions
+
+export interface ProjectManifest {
+    version: string;
+    template_id: string;
+    created: string;
+    modified: string;
+}
+
+export interface LemmaConfirmation {
+    lemma: string;
+    msa: string;
+    normalized?: string;
+}
+
+export interface ProjectData {
+    source: string;
+    output: string;
+    confirmations: Record<number, LemmaConfirmation>;
+    manifest: ProjectManifest;
+}
+
+// Save project archive (.teis)
+export async function saveProject(
+    path: string,
+    source: string,
+    output: string,
+    confirmationsJson: string,
+    templateId: string
+): Promise<void> {
+    return invoke('save_project', {
+        path,
+        source,
+        output,
+        confirmationsJson,
+        templateId,
+    });
+}
+
+// Open project archive (.teis)
+export async function openProject(path: string): Promise<ProjectData> {
+    return invoke('open_project', { path });
 }

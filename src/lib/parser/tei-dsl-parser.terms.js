@@ -21,4 +21,5 @@ export const
   UnclearContent = 19,
   Entity = 20,
   WordBoundary = 21,
-  Text = 22
+  CompoundJoin = 22,
+  Text = 23

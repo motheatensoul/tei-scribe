@@ -12,8 +12,19 @@ TEI-Scribe provides a split-pane interface:
 
 1. Select a template from the toolbar dropdown
 2. Type your transcription using the DSL syntax
-3. View the rendered output in the preview pane
-4. Click "Export" to save as TEI-XML
+3. Click words in the rendered view to add lemma annotations
+4. Save your project with Ctrl+S
+5. Export the TEI-XML when ready for publication
+
+### Project Files
+
+TEI-Scribe uses `.teis` project archives (ZIP format) that bundle:
+- Your DSL source text
+- Compiled TEI-XML output
+- Per-word lemma confirmations
+- Project metadata
+
+This means you never lose your lemmatization work when saving and reopening projects.
 
 ## DSL Syntax
 
@@ -98,30 +109,82 @@ Click any word in the rendered text view to open the Lemmatizer.
 1. Click a word in the rendered text
 2. Search for the lemma in the ONP dictionary
 3. Select the correct headword from results
-4. Enter the morphological analysis (e.g., "nom.sg.f", "pret.ind.3sg")
-5. Click "Save"
+4. Select the word class (noun, verb, adjective, etc.)
+5. Fill in the relevant morphological fields that appear
+6. Click "Save"
+
+### Editing Existing Mappings
+
+When you click an existing mapping from the list:
+- The form fields populate with the saved values
+- You can modify the word class, morphology, or normalized form
+- Click "Save" to update the mapping
 
 ### Viewing Lemma Info
 
-- Words with known lemmas are highlighted with a green border
+- **Confirmed words** (green border): This specific word instance has a confirmed lemma
+- **Suggested words** (faded border): The dictionary knows this wordform but it hasn't been confirmed for this instance
 - Hover over a word to see its lemma and analysis in the tooltip
-- Click to view or edit existing mappings
 
-### Morphological Analysis Format
+### MENOTA Morphological Analysis Format (me:msa)
 
-Use abbreviated grammatical tags:
+The Lemmatizer uses the MENOTA me:msa format for morphological tagging. Analyses are stored as space-separated name tokens.
 
-| Tag | Meaning |
-|-----|---------|
-| nom/acc/dat/gen | Case |
-| sg/pl | Number |
-| m/f/n | Gender |
-| pres/pret | Tense |
-| ind/subj/imp | Mood |
-| 1/2/3 | Person |
-| inf/pple | Non-finite forms |
+#### Word Classes
 
-Example: `acc.sg.m` = accusative singular masculine
+| Code | Meaning |
+|------|---------|
+| xNC | Common noun |
+| xNP | Proper noun |
+| xAJ | Adjective |
+| xVB | Verb |
+| xPE | Personal pronoun |
+| xPR | Reflexive pronoun |
+| xPQ | Interrogative pronoun |
+| xPI | Indefinite pronoun |
+| xDD | Demonstrative determiner |
+| xDQ | Quantifying determiner |
+| xDP | Possessive determiner |
+| xAV | Adverb |
+| xAQ | Interrogative adverb |
+| xAP | Preposition |
+| xCC | Coordinating conjunction |
+| xCS | Subordinating conjunction |
+| xIT | Interjection |
+| xIM | Infinitive marker |
+
+#### Morphological Categories
+
+| Category | Values |
+|----------|--------|
+| Case | cN (nom), cG (gen), cD (dat), cA (acc) |
+| Number | nS (singular), nD (dual), nP (plural) |
+| Gender | gM (masc), gF (fem), gN (neut) |
+| Definiteness | sI (indefinite), sD (definite) |
+| Grade | rP (positive), rC (comparative), rS (superlative) |
+| Person | p1, p2, p3 |
+| Tense | tPS (present), tPT (preterite) |
+| Mood | mIN (indicative), mSU (subjunctive), mIP (imperative) |
+| Voice | vA (active), vR (reflexive/middle) |
+| Finiteness | fF (finite), fP (participle), fS (supine), fI (infinitive) |
+
+#### Examples
+
+- `xNC cN nS gF` = common noun, nominative, singular, feminine
+- `xVB fF p3 nS tPT mIN vA` = verb, finite, 3rd person, singular, preterite, indicative, active
+- `xAJ rC cA nP gM` = adjective, comparative, accusative, plural, masculine
+
+### TEI Output
+
+When you save lemma mappings, the TEI output will include `lemma` and `me:msa` attributes on word elements:
+
+```xml
+<w lemma="kona" me:msa="xNC cN nP gF">
+  <me:facs>konur</me:facs>
+  <me:dipl>konur</me:dipl>
+  <me:norm>konur</me:norm>
+</w>
+```
 
 ## Templates
 
@@ -181,6 +244,15 @@ Toggle between views using the buttons in the preview header:
 - **XML**: Raw TEI-XML output
 
 ## Keyboard Shortcuts
+
+### Project
+
+| Shortcut | Action |
+|----------|--------|
+| Ctrl+S / Cmd+S | Save project (.teis archive) |
+| Ctrl+O / Cmd+O | Open project or DSL file |
+
+### Editor
 
 - Standard text editing shortcuts work in the editor
 - Tab indents, Shift+Tab unindents

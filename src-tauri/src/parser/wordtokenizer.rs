@@ -79,6 +79,16 @@ impl WordTokenizer {
                     continuation_active = false;
                 }
 
+                // Compound join - keeps word parts together, will be handled by compiler
+                // e.g., "upp~haf" stays as one word unit
+                Node::CompoundJoin => {
+                    if state == State::BetweenWords {
+                        state = State::InWord;
+                    }
+                    current_word.push(node);
+                    continuation_active = false;
+                }
+
                 // Other inline elements stay within the current word
                 Node::Abbreviation { .. }
                 | Node::Gap { .. }

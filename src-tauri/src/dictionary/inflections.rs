@@ -11,10 +11,13 @@ pub struct InflectedForm {
     pub onp_id: String,
     /// The lemma (headword)
     pub lemma: String,
-    /// Morphological analysis (e.g., "nom.sg.f", "dat.pl.m.def")
+    /// Morphological analysis in MENOTA me:msa format (e.g., "xNC cN nS gF")
     pub analysis: String,
-    /// Part of speech from ONP
+    /// Part of speech / word class
     pub part_of_speech: String,
+    /// Canonical normalized form for <me:norm> level (user-provided)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub normalized: Option<String>,
 }
 
 /// Store for user-built inflection mappings
@@ -100,30 +103,11 @@ impl InflectionStore {
             .unwrap_or_default()
     }
 
-    /// Check if a wordform has any mappings
+    /// Check if a wordform has any mappings (used in tests)
+    #[allow(dead_code)]
     pub fn contains(&self, wordform: &str) -> bool {
         let normalized = Self::normalize(wordform);
         self.forms.contains_key(&normalized)
-    }
-
-    /// Get all stored wordforms
-    pub fn all_forms(&self) -> Vec<&String> {
-        self.forms.keys().collect()
-    }
-
-    /// Get total number of unique wordforms
-    pub fn len(&self) -> usize {
-        self.forms.len()
-    }
-
-    /// Check if store is empty
-    pub fn is_empty(&self) -> bool {
-        self.forms.is_empty()
-    }
-
-    /// Get all mappings (for export)
-    pub fn all_mappings(&self) -> &HashMap<String, Vec<InflectedForm>> {
-        &self.forms
     }
 
     /// Clear all mappings
@@ -147,6 +131,7 @@ mod tests {
                 lemma: "kona".to_string(),
                 analysis: "nom.pl.f".to_string(),
                 part_of_speech: "commonNoun".to_string(),
+                normalized: None,
             },
         );
 
@@ -172,6 +157,7 @@ mod tests {
                 lemma: "vera".to_string(),
                 analysis: "pret.ind.1/3sg".to_string(),
                 part_of_speech: "verb".to_string(),
+                normalized: None,
             },
         );
         store.add(
@@ -181,6 +167,7 @@ mod tests {
                 lemma: "verja".to_string(),
                 analysis: "pret.ind.1/3sg".to_string(),
                 part_of_speech: "verb".to_string(),
+                normalized: None,
             },
         );
 
@@ -197,6 +184,7 @@ mod tests {
             lemma: "kona".to_string(),
             analysis: "nom.pl.f".to_string(),
             part_of_speech: "commonNoun".to_string(),
+            normalized: None,
         };
 
         store.add("konur", form.clone());
@@ -217,6 +205,7 @@ mod tests {
                 lemma: "kona".to_string(),
                 analysis: "nom.pl.f".to_string(),
                 part_of_speech: "commonNoun".to_string(),
+                normalized: None,
             },
         );
 

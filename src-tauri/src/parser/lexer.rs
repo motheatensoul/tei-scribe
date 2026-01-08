@@ -150,6 +150,15 @@ impl<'a> Lexer<'a> {
                 continue;
             }
 
+            // Compound word join: ~ not followed by line/page break
+            // e.g., "upp~haf" → "upp haf" in facs/dipl, "upphaf" in norm
+            if remaining.starts_with('~') && !remaining.starts_with("~//") {
+                self.flush_text(&mut doc, &mut text_buf);
+                self.pos += 1;
+                doc.push(Node::CompoundJoin);
+                continue;
+            }
+
             // Explicit word boundary: |
             if remaining.starts_with('|') {
                 self.flush_text(&mut doc, &mut text_buf);

@@ -129,16 +129,6 @@ impl OnpRegistry {
     pub fn len(&self) -> usize {
         self.entries_by_id.len()
     }
-
-    /// Check if registry is empty
-    pub fn is_empty(&self) -> bool {
-        self.entries_by_id.is_empty()
-    }
-
-    /// Get all entries (for serialization)
-    pub fn all_entries(&self) -> Vec<&OnpEntry> {
-        self.entries_by_id.values().collect()
-    }
 }
 
 #[cfg(test)]
