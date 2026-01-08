@@ -4370,7 +4370,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "tei-scribe"
+name = "saga-scribe"
 version = "0.1.0"
 dependencies = [
  "log",

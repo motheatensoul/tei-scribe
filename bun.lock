@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "tei-scribe",
+      "name": "saga-scribe",
       "dependencies": {
         "@codemirror/commands": "^6.10.1",
         "@codemirror/language": "^6.12.1",

@@ -8,11 +8,11 @@
 
 ---
 
-# TEI-Scribe Project Documentation
+# Saga-Scribe Project Documentation
 
 ## Overview
 
-TEI-Scribe is a Tauri desktop application for manuscript transcription using a custom DSL that compiles to TEI-XML, with specific support for MENOTA (Medieval Nordic Text Archive) extensions.
+Saga-Scribe is a Tauri desktop application for manuscript transcription using a custom DSL that compiles to TEI-XML, with specific support for MENOTA (Medieval Nordic Text Archive) extensions.
 
 **Version:** 0.1.0 (alpha)
 **License:** GPL-3.0-or-later
@@ -26,7 +26,7 @@ TEI-Scribe is a Tauri desktop application for manuscript transcription using a c
 ## Architecture
 
 ```
-tei-scribe/
+saga-scribe/
 ├── src/                          # Frontend (Svelte/TypeScript)
 │   ├── lib/
 │   │   ├── components/           # UI: Editor, Preview, Toolbar, TemplateManager, EntityBrowser
@@ -183,7 +183,7 @@ cd src-tauri && cargo test
 
 ## Project Archive Format
 
-TEI-Scribe uses a `.teis` archive format (a ZIP file) to bundle all work for a manuscript:
+Saga-Scribe uses a `.teis` archive format (a ZIP file) to bundle all work for a manuscript:
 
 ```
 project.teis (ZIP archive)

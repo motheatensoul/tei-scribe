@@ -1,5 +1,5 @@
 [package]
-name = "tei-scribe"
+name = "saga-scribe"
 version = "0.1.0"
 description = "TEI-XML manuscript transcription editor with custom DSL shorthand"
 authors = ["you"]

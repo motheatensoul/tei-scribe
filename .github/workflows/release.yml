@@ -49,7 +49,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
         with:
           tag_name: ${{ inputs.version }}
-          release_name: TEI-Scribe ${{ inputs.version }}
+          release_name: Saga-Scribe ${{ inputs.version }}
           body_path: changelog.txt
           draft: false
           prerelease: ${{ inputs.prerelease }}

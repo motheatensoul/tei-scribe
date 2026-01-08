@@ -1,10 +1,10 @@
 # TEI-Scribe User Guide
 
-This guide explains how to use TEI-Scribe for manuscript transcription.
+This guide explains how to use Saga-Scribe for manuscript transcription.
 
 ## Getting Started
 
-TEI-Scribe provides a split-pane interface:
+Saga-Scribe provides a split-pane interface:
 - **Left pane**: DSL Editor for entering your transcription
 - **Right pane**: Preview showing rendered text or raw XML output
 
@@ -18,7 +18,7 @@ TEI-Scribe provides a split-pane interface:
 
 ### Project Files
 
-TEI-Scribe uses `.teis` project archives (ZIP format) that bundle:
+Saga-Scribe uses `.teis` project archives (ZIP format) that bundle:
 - Your DSL source text
 - Compiled TEI-XML output
 - Per-word lemma confirmations
