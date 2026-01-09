@@ -326,7 +326,7 @@
                         <div class="text-center py-4">
                             <h3 class="text-2xl font-bold">Saga-Scribe</h3>
                             <p class="text-base-content/70">
-                                Version 0.1.0 (alpha)
+                                Version 0.2.0 (alpha)
                             </p>
                         </div>
 

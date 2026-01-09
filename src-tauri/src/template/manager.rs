@@ -25,10 +25,7 @@ pub struct TemplateManager {
 
 impl TemplateManager {
     pub fn new(app: &AppHandle) -> Result<Self, String> {
-        let app_data = app
-            .path()
-            .app_data_dir()
-            .map_err(|e| e.to_string())?;
+        let app_data = app.path().app_data_dir().map_err(|e| e.to_string())?;
 
         let templates_dir = app_data.join("templates");
         fs::create_dir_all(&templates_dir).map_err(|e| e.to_string())?;
@@ -77,6 +74,15 @@ impl TemplateManager {
         fs::write(&path, content).map_err(|e| e.to_string())
     }
 
+    pub fn delete_template(&self, id: &str) -> Result<(), String> {
+        let path = self.templates_dir.join(format!("{}.json", id));
+        if path.exists() {
+            fs::remove_file(&path).map_err(|e| e.to_string())
+        } else {
+            Err(format!("Template '{}' not found", id))
+        }
+    }
+
     fn tei_p5_template(&self) -> Template {
         Template {
             id: "tei-p5".to_string(),
@@ -114,7 +120,8 @@ impl TemplateManager {
         Template {
             id: "menota".to_string(),
             name: "Menota".to_string(),
-            description: "Menota handbook compatible structure for medieval Nordic texts".to_string(),
+            description: "Menota handbook compatible structure for medieval Nordic texts"
+                .to_string(),
             header: r#"<?xml version="1.0" encoding="UTF-8"?>
 <TEI xmlns="http://www.tei-c.org/ns/1.0" xmlns:me="http://www.menota.org/ns/1.0">
   <teiHeader>

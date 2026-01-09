@@ -14,7 +14,7 @@
 
 Saga-Scribe is a Tauri desktop application for manuscript transcription using a custom DSL that compiles to TEI-XML, with specific support for MENOTA (Medieval Nordic Text Archive) extensions.
 
-**Version:** 0.1.0 (alpha)
+**Version:** 0.2.0 (alpha)
 **License:** GPL-3.0-or-later
 
 ## Tech Stack
@@ -130,6 +130,7 @@ Users can override any mapping via the Entity Browser's custom mapping editor.
 - **Editor component:** `src/lib/components/Editor.svelte`
 - **Settings dialog:** `src/lib/components/SettingsDialog.svelte`
 - **Help dialog:** `src/lib/components/HelpDialog.svelte`
+- **Template editor:** `src/lib/components/TemplateEditor.svelte`
 - **Syntax highlighting:** `src/lib/parser/highlighter.ts`, `src/lib/parser/tei-dsl.grammar`
 - **ONP dictionary:** `src-tauri/src/dictionary/onp.rs`
 - **Inflection store:** `src-tauri/src/dictionary/inflections.rs`
@@ -174,9 +175,9 @@ Users can override any mapping via the Entity Browser's custom mapping editor.
 - System theme option that respects OS dark/light mode preference via xdg-desktop-portal (Linux), native APIs (macOS/Windows)
 
 - Help system with keyboard shortcuts reference, DSL syntax guide, and about section (F1 or ? button)
+- Template editing UI with create, edit, duplicate, and delete functionality (⚙ button in editor header)
 
 **Not Yet Implemented:**
-- Template editing UI (currently templates are built-in or manually edited)
 - TEI-XML validation against schema
 - Search/replace functionality in editor
 - Editor undo/redo (CodeMirror has built-in support, needs UI integration)

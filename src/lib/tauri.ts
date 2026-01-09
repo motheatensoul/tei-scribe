@@ -62,6 +62,10 @@ export async function saveTemplate(template: Template): Promise<void> {
   return invoke("save_template", { template });
 }
 
+export async function deleteTemplate(id: string): Promise<void> {
+  return invoke("delete_template", { id });
+}
+
 export interface CompileOptions {
   wordWrap?: boolean;
   autoLineNumbers?: boolean;

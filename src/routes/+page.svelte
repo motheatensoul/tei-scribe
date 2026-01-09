@@ -5,7 +5,7 @@
     import Editor from "$lib/components/Editor.svelte";
     import Preview from "$lib/components/Preview.svelte";
     import Toolbar from "$lib/components/Toolbar.svelte";
-    import TemplateManager from "$lib/components/TemplateManager.svelte";
+    import TemplateEditor from "$lib/components/TemplateEditor.svelte";
     import EntityBrowser from "$lib/components/EntityBrowser.svelte";
     import Lemmatizer from "$lib/components/Lemmatizer.svelte";
     import ErrorPanel from "$lib/components/ErrorPanel.svelte";
@@ -727,21 +727,7 @@
         </Splitpanes>
     </div>
 
-    {#if showTemplateManager}
-        <div class="modal modal-open">
-            <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-            <div
-                class="modal-backdrop"
-                role="none"
-                onclick={() => (showTemplateManager = false)}
-            ></div>
-            <div class="modal-box">
-                <TemplateManager
-                    onclose={() => (showTemplateManager = false)}
-                />
-            </div>
-        </div>
-    {/if}
+    <TemplateEditor bind:isopen={showTemplateManager} />
 
     {#if showEntityBrowser}
         <div class="modal modal-open">

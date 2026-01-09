@@ -58,6 +58,49 @@ Settings are automatically saved when you click "Save Changes". Click "Reset to 
 
 Press **F1** or click the **?** button in the toolbar to open the Help dialog. You can also use **Ctrl+/** (or **Cmd+/** on macOS).
 
+## Template Editor
+
+Click the **⚙** (gear) icon in the editor header to open the Template Editor. Templates define the TEI-XML structure that wraps your transcription.
+
+### Built-in Templates
+
+Saga-Scribe includes two built-in templates:
+
+- **TEI P5**: Standard TEI P5 document structure with basic header
+- **Menota**: MENOTA handbook compatible structure with multi-level transcription support
+
+Built-in templates cannot be modified or deleted, but you can clone them to create custom versions.
+
+### Creating a Custom Template
+
+1. Click **+ New Template** in the Template Editor
+2. Fill in the template details:
+   - **Name**: Display name for the template
+   - **Description**: Brief explanation of the template's purpose
+   - **Header XML**: TEI-XML content before your transcription (up to and including `<body>`)
+   - **Footer XML**: TEI-XML content after your transcription (closing tags)
+3. Configure options:
+   - **Word wrapping**: Wrap words in `<w>` tags
+   - **Auto line numbers**: Add `n="..."` attributes to `<lb/>` elements
+   - **Multi-level (MENOTA)**: Enable facs/dipl/norm transcription levels
+4. Click **Create Template**
+
+### Editing Templates
+
+- Click the **✏️** icon to edit a custom template
+- Click the **🔧** icon on a built-in template to clone and customize it
+- Click the **📋** icon to duplicate any template
+- Click the **🗑️** icon to delete a custom template
+
+### Template Options Explained
+
+| Option | Effect |
+|--------|--------|
+| Word wrapping | Each word is wrapped in `<w>` tags, punctuation in `<pc>` tags |
+| Auto line numbers | Line breaks (`//`) automatically get sequential numbers |
+| Multi-level | Words contain `<me:facs>`, `<me:dipl>`, `<me:norm>` child elements |
+
+
 The Help dialog contains three tabs:
 
 ### Keyboard Shortcuts
