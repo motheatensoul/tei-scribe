@@ -95,6 +95,8 @@ pub fn lookup_inflection(app: AppHandle, wordform: String) -> Result<Vec<Inflect
 
 /// Add an inflection mapping
 /// The `wordform` parameter should be the diplomatic-level form for consistent lookups.
+// We need to introduce an inflection struct as the argument here potentially to make clippy happy, not sure if that gels with tauri though.
+#[allow(clippy::too_many_arguments)]
 #[tauri::command(rename_all = "camelCase")]
 pub fn add_inflection(
     app: AppHandle,
@@ -136,7 +138,10 @@ pub fn remove_inflection(
     onp_id: String,
     analysis: String,
 ) -> Result<(), String> {
-    info!("Removing inflection: {} ({}, {})", wordform, onp_id, analysis);
+    info!(
+        "Removing inflection: {} ({}, {})",
+        wordform, onp_id, analysis
+    );
 
     let mut store = InflectionStore::load(&app)?;
     store.remove(&wordform, &onp_id, &analysis);

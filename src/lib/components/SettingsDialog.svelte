@@ -62,6 +62,8 @@
 <svelte:window onkeydown={handleKeydown} />
 
 {#if isopen}
+    <!-- This only handles using clicking outside the modal to dismiss, not relevant interaction mode for a11y -->
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
     <div
         class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
         onclick={handleBackdropClick}
@@ -112,7 +114,7 @@
                                     <option value="light">Light</option>
                                     <option value="dark">Dark</option>
                                 </select>
-                                <label class="label">
+                                <label class="label" for="theme-select">
                                     <span class="label-text-alt"
                                         >Choose the color scheme. System follows
                                         your OS theme preference</span
@@ -212,7 +214,7 @@
                                         <span>1000ms</span>
                                         <span>2000ms</span>
                                     </div>
-                                    <label class="label">
+                                    <label class="label" for="preview-delay-input">
                                         <span class="label-text-alt"
                                             >Time to wait after typing before
                                             updating preview</span
@@ -248,7 +250,7 @@
                                     >
                                 {/each}
                             </select>
-                            <label class="label">
+                            <label class="label" for="template-select">
                                 <span class="label-text-alt"
                                     >The template to use for new projects</span
                                 >

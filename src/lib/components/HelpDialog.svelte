@@ -114,6 +114,8 @@
 <svelte:window onkeydown={handleKeydown} />
 
 {#if isopen}
+    <!-- Svelte complains about a11y issues here since this technically an interactive element with a click event. Since we are only handling the user clicking outside the modal dismiss the modal this should be fine. -->
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
     <div
         class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
         onclick={handleBackdropClick}
@@ -326,7 +328,7 @@
                         <div class="text-center py-4">
                             <h3 class="text-2xl font-bold">Saga-Scribe</h3>
                             <p class="text-base-content/70">
-                                Version 0.1.0 (alpha)
+                                Version 0.2.0 (alpha)
                             </p>
                         </div>
 

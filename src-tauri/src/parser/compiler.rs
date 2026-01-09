@@ -294,6 +294,8 @@ impl<'a> Compiler<'a> {
         output
     }
 
+    // Telling clippy to shut up for now.
+    #[allow(clippy::collapsible_match)]
     fn node_to_diplomatic(&self, node: &Node) -> String {
         match node {
             Node::Text(text) => self.escape_xml(text),
@@ -319,6 +321,7 @@ impl<'a> Compiler<'a> {
             }
             Node::Abbreviation { expansion, .. } => format!("<expan>{}</expan>", self.escape_xml(expansion)),
             Node::Unclear(text) => format!("<unclear>{}</unclear>", self.escape_xml(text)),
+            // Clippy is cranky about this being two nested matches, its suggested fix does not work though.
             Node::Gap { supplied, .. } => {
                 // Diplomatic shows supplied text if available
                 match supplied {
@@ -345,6 +348,8 @@ impl<'a> Compiler<'a> {
         output
     }
 
+    // Telling clippy to shut it
+    #[allow(clippy::collapsible_match)]
     fn node_to_normalized(&self, node: &Node) -> String {
         match node {
             Node::Text(text) => {
@@ -381,6 +386,7 @@ impl<'a> Compiler<'a> {
                 let normalized = self.normalize_text(text);
                 format!("<unclear>{}</unclear>", self.escape_xml(&normalized))
             }
+            //Same as above, Clippy is unhappy.
             Node::Gap { supplied, .. } => {
                 match supplied {
                     Some(text) => {

@@ -29,7 +29,7 @@ pub fn run() {
             use tauri::Manager;
 
             let app_handle = app.handle();
-            if let Ok(manager) = SettingsManager::new(&app_handle) {
+            if let Ok(manager) = SettingsManager::new(app_handle) {
                 let settings = manager.load();
                 let theme_str = settings.theme;
 
@@ -63,6 +63,7 @@ pub fn run() {
             commands::template::list_templates,
             commands::template::get_template,
             commands::template::save_template,
+            commands::template::delete_template,
             commands::settings::load_settings,
             commands::settings::save_settings,
             commands::settings::get_system_theme,

@@ -111,6 +111,7 @@
     ];
 
     // Search state - use diplomatic form for searching
+    // svelte-ignore state_referenced_locally 
     let searchQuery = $state(diplomatic);
     let searchResults = $state<OnpEntry[]>([]);
     let isSearching = $state(false);

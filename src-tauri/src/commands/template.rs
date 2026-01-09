@@ -18,3 +18,13 @@ pub fn save_template(app: AppHandle, template: Template) -> Result<(), String> {
     let manager = TemplateManager::new(&app)?;
     manager.save_template(&template)
 }
+
+#[tauri::command]
+pub fn delete_template(app: AppHandle, id: String) -> Result<(), String> {
+    // Prevent deletion of built-in templates
+    if id == "tei-p5" || id == "menota" {
+        return Err("Cannot delete built-in templates".to_string());
+    }
+    let manager = TemplateManager::new(&app)?;
+    manager.delete_template(&id)
+}
