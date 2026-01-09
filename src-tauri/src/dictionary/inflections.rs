@@ -129,10 +129,10 @@ impl InflectionStore {
         self.forms.len()
     }
 
-    /// Get the total number of inflection mappings (across all wordforms)
-    pub fn mapping_count(&self) -> usize {
-        self.forms.values().map(|v| v.len()).sum()
-    }
+    // Get the total number of inflection mappings (across all wordforms)
+    // pub fn mapping_count(&self) -> usize {
+    //     self.forms.values().map(|v| v.len()).sum()
+    // }
 }
 
 #[cfg(test)]

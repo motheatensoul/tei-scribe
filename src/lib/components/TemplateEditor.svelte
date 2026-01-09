@@ -238,6 +238,8 @@
 <svelte:window onkeydown={handleKeydown} />
 
 {#if isopen}
+    <!-- Only handles dismissing the dialog by clicking outside of it, no a11y relevance -->
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
     <div
         class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
         onclick={handleBackdropClick}
@@ -323,7 +325,7 @@
                                         {/if}
                                     </div>
                                 </div>
-                                <div class="flex gap-1 flex-shrink-0">
+                                <div class="flex gap-1 shrink-0">
                                     <button
                                         class="btn btn-ghost btn-sm"
                                         onclick={() => handleDuplicate(template)}
@@ -419,16 +421,16 @@
 
                         <!-- Options -->
                         <div class="form-control">
-                            <label class="label">
+                            <span class="label">
                                 <span class="label-text font-medium"
                                     >Options</span
                                 >
-                            </label>
+                            </span>
                             <div
                                 class="flex flex-wrap gap-4 p-3 bg-base-200 rounded-lg"
                             >
                                 <label
-                                    class="label cursor-pointer gap-2 flex-1 min-w-[200px]"
+                                    class="label cursor-pointer gap-2 flex-1 min-w-50"
                                 >
                                     <input
                                         type="checkbox"
@@ -447,7 +449,7 @@
                                     </div>
                                 </label>
                                 <label
-                                    class="label cursor-pointer gap-2 flex-1 min-w-[200px]"
+                                    class="label cursor-pointer gap-2 flex-1 min-w-50"
                                 >
                                     <input
                                         type="checkbox"
@@ -466,7 +468,7 @@
                                     </div>
                                 </label>
                                 <label
-                                    class="label cursor-pointer gap-2 flex-1 min-w-[200px]"
+                                    class="label cursor-pointer gap-2 flex-1 min-w-50"
                                 >
                                     <input
                                         type="checkbox"
