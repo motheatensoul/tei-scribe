@@ -4,6 +4,7 @@ use crate::parser::{Compiler, CompilerConfig, LemmaMapping};
 use std::collections::HashMap;
 
 // Too many arguments for clippy, consolidate into a template-struct if compatible with tauri.
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub fn compile_dsl(
     input: String,

@@ -294,6 +294,8 @@ impl<'a> Compiler<'a> {
         output
     }
 
+    // Telling clippy to shut up for now.
+    #[allow(clippy::collapsible_match)]
     fn node_to_diplomatic(&self, node: &Node) -> String {
         match node {
             Node::Text(text) => self.escape_xml(text),
@@ -346,6 +348,8 @@ impl<'a> Compiler<'a> {
         output
     }
 
+    // Telling clippy to shut it
+    #[allow(clippy::collapsible_match)]
     fn node_to_normalized(&self, node: &Node) -> String {
         match node {
             Node::Text(text) => {
