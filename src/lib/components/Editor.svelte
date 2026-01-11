@@ -4,6 +4,7 @@
     import { EditorState } from '@codemirror/state';
     import { defaultKeymap, history, historyKeymap, undo, redo } from '@codemirror/commands';
     import { search, searchKeymap, openSearchPanel, closeSearchPanel, searchPanelOpen } from '@codemirror/search';
+    import { foldGutter, foldKeymap } from '@codemirror/language';
     import { editor } from '$lib/stores/editor';
     import { teiDsl, teiDslHighlighting } from '$lib/parser/highlighter';
     import { teiLinter } from '$lib/parser/linter';
@@ -21,8 +22,9 @@
             extensions: [
                 lineNumbers(),
                 highlightActiveLineGutter(),
+                foldGutter(),
                 history(),
-                keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap]),
+                keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap, ...foldKeymap]),
                 search({ top: true }),
                 teiDsl,
                 teiDslHighlighting,

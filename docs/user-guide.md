@@ -419,6 +419,15 @@ This is useful for:
 | Tab | Indent |
 | Shift+Tab | Unindent |
 
+### Folding (Collapsible Sections)
+
+| Shortcut | Action |
+|----------|--------|
+| Ctrl+Shift+[ / Cmd+Shift+[ | Fold section at cursor |
+| Ctrl+Shift+] / Cmd+Shift+] | Unfold section at cursor |
+
+You can also click the fold markers in the gutter (▶/▼) next to page breaks (`///`) to collapse or expand sections.
+
 ### Lemmatization
 
 | Shortcut | Action |

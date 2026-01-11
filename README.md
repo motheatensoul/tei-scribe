@@ -15,6 +15,7 @@ A desktop application for scholarly manuscript transcription, producing TEI-XML 
 - **Import support**: Import from TEI-XML or plain text files into DSL format
 - **XSLT rendering**: Apply custom XSLT stylesheets to preview XML transformations
 - **Page navigation**: Browse large manuscripts by page with instant navigation
+- **Collapsible sections**: Fold/unfold pages in the editor at page breaks (`///`)
 - **Search & replace**: Find and replace text in the editor (Ctrl+H)
 - **Settings menu**: Configure theme, font size, auto-preview, and default template
 
@@ -67,6 +68,8 @@ bun run tauri build  # Production build
 | Ctrl+H | Find and replace |
 | Ctrl+Z | Undo (editor) |
 | Ctrl+Y | Redo (editor) |
+| Ctrl+Shift+[ | Fold section at cursor |
+| Ctrl+Shift+] | Unfold section at cursor |
 | Ctrl+Shift+Z | Undo lemmatization |
 | Ctrl+Shift+Y | Redo lemmatization |
 | F1 | Open help dialog |

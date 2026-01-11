@@ -157,7 +157,7 @@ All Tauri commands that do heavy work should:
 - [x] XSLT support for rendering from XML (browser-based XSLTProcessor)
 - [x] Text rendering performance (page-based chunking, removed 5k token limit)
 - [x] Clean up README, docs to include new features
-- Collapsible sections in editor for long manuscripts
+- [x] Collapsible sections in editor for long manuscripts (fold at page breaks)
 - Manuscript metadata editor (beyond template header)
 - Word- and character-level annotations beyond lemmatization
 - Export to additional formats (HTML, PDF)

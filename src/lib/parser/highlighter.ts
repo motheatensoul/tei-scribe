@@ -3,10 +3,12 @@ import {
   syntaxHighlighting,
   LRLanguage,
   LanguageSupport,
+  foldNodeProp,
 } from "@codemirror/language";
 import { tags } from "@lezer/highlight";
 import { styleTags } from "@lezer/highlight";
 import { parser } from "./tei-dsl-parser.js";
+import { syntaxTree } from "@codemirror/language";
 
 /**
  * TEI-DSL syntax highlighting styles using CSS classes for theme compatibility
@@ -37,7 +39,7 @@ export const teiDslHighlightStyle = HighlightStyle.define([
 ]);
 
 /**
- * Configure the parser with syntax highlighting tags
+ * Configure the parser with syntax highlighting tags and fold regions
  */
 const parserWithMetadata = parser.configure({
   props: [
@@ -82,6 +84,38 @@ const parserWithMetadata = parser.configure({
       // Word boundary and compound join
       WordBoundary: tags.separator,
       CompoundJoin: tags.separator,
+    }),
+    // Fold regions at page breaks - each page break folds content until next page break
+    foldNodeProp.add({
+      PageBreak: (node, state) => {
+        // Get the end of the current line (after the page break marker)
+        const lineEnd = state.doc.lineAt(node.to).to;
+
+        // Search for the next PageBreak in the document
+        const tree = syntaxTree(state);
+        let nextPageBreakStart: number | null = null;
+
+        tree.iterate({
+          from: node.to,
+          enter: (iterNode) => {
+            if (iterNode.name === "PageBreak" && iterNode.from > node.to) {
+              // Found next page break - get start of its line
+              nextPageBreakStart = state.doc.lineAt(iterNode.from).from;
+              return false; // Stop iteration
+            }
+          }
+        });
+
+        // If we found another page break, fold to just before it
+        // Otherwise fold to end of document
+        const foldEnd = nextPageBreakStart ?? state.doc.length;
+
+        // Only create fold if there's content to fold (at least one line)
+        if (foldEnd > lineEnd) {
+          return { from: lineEnd, to: foldEnd };
+        }
+        return null;
+      }
     }),
   ],
 });
