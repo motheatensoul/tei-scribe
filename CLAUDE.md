@@ -102,3 +102,18 @@ Uses **Junicode** (in `static/fonts/`) for MUFI characters.
 ## Development Notes
 - **Cargo Command Quirk:** `cd src-tauri && cargo ...` fails. Use `cd src-tauri; cargo ...`.
 - **Bun:** Always use `bun` instead of `npm`.
+
+## Missing features:
+
+- Search/replace functionality in editor
+- Editor undo/redo (CodeMirror has built-in support, needs UI integration)
+- Import from other transcription formats
+- XSLT support for rendering from XML
+- Export to additional formats (HTML, PDF)
+- Collapsible sections in editor for long documents
+- Word- and character-level annotations beyond lemmatization
+- Manuscript metadata editor (beyond template header)
+- Custom entity set management (add/remove entities beyond MENOTA)
+- Performance optimization for large manuscripts (>10k lines)
+
+
