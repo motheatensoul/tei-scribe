@@ -333,30 +333,34 @@
                 };
             }
 
-            console.log(
-                "Compiling with session lemma mappings (by index):",
-                lemmaMappings,
-            );
+            console.log("[Compile] Preparing invoke...");
+            const options = {
+                wordWrap: template.wordWrap,
+                autoLineNumbers: template.autoLineNumbers,
+                multiLevel: template.multiLevel,
+                wrapPages: template.wrapPages,
+                entitiesJson: entitiesJson ?? undefined,
+                normalizerJson: normalizerJson ?? undefined,
+                entityMappingsJson: entityMappingsJson ?? undefined,
+                customMappings: $entityStore.customMappings,
+                lemmaMappingsJson:
+                    Object.keys(lemmaMappings).length > 0
+                        ? JSON.stringify(lemmaMappings)
+                        : undefined,
+            };
 
-            previewContent = await compileDsl(
+            console.log("[Compile] Calling compileDsl invoke...");
+            const result = await compileDsl(
                 content,
                 template.header,
                 template.footer,
-                {
-                    wordWrap: template.wordWrap,
-                    autoLineNumbers: template.autoLineNumbers,
-                    multiLevel: template.multiLevel,
-                    wrapPages: template.wrapPages,
-                    entitiesJson: entitiesJson ?? undefined,
-                    normalizerJson: normalizerJson ?? undefined,
-                    entityMappingsJson: entityMappingsJson ?? undefined,
-                    customMappings: $entityStore.customMappings,
-                    lemmaMappingsJson:
-                        Object.keys(lemmaMappings).length > 0
-                            ? JSON.stringify(lemmaMappings)
-                            : undefined,
-                },
+                options,
             );
+            console.log("[Compile] invoke returned, result length:", result.length);
+
+            console.log("[Compile] Setting previewContent...");
+            previewContent = result;
+            console.log("[Compile] Done");
         } catch (e) {
             previewContent = `Error: ${e}`;
         }
@@ -645,16 +649,23 @@
         isImporting = true;
 
         try {
+            console.log("[Import] Calling importFile...");
             const content = await importFile(pathStr);
+            console.log("[Import] importFile returned, length:", content.length);
 
+            console.log("[Import] Setting editor content...");
             editorComponent?.setContent(content);
             editor.setFile(null, content);
+            console.log("[Import] Editor content set");
 
             // Clear history and session confirmations
             lemmatizationHistory.clear();
             sessionLemmaStore.clear();
 
+            console.log("[Import] Calling doCompile...");
             await doCompile(content);
+            console.log("[Import] doCompile returned");
+
             errorStore.info("Import", `Imported content from ${pathStr}`);
         } catch (e) {
             errorStore.error("Import", `Failed to import: ${e}`);
