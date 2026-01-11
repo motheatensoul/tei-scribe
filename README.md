@@ -2,7 +2,7 @@
 
 A desktop application for scholarly manuscript transcription, producing TEI-XML with MENOTA (Medieval Nordic Text Archive) extensions.
 
-**Version:** 0.3.0 (alpha)
+**Version:** 0.4.0 (alpha)
 
 ## Features
 
@@ -11,7 +11,12 @@ A desktop application for scholarly manuscript transcription, producing TEI-XML 
 - **Entity browser**: ~1,980 MENOTA/MUFI characters with customizable diplomatic mappings
 - **Lemmatization**: ONP dictionary integration with morphological analysis (me:msa)
 - **Project archives**: Bundle source, compiled XML, and lemma confirmations in .teis files
-- **Real-time preview**: See rendered text or XML as you type
+- **Real-time preview**: See rendered text, XSLT-transformed output, or raw XML as you type
+- **Import support**: Import from TEI-XML or plain text files into DSL format
+- **XSLT rendering**: Apply custom XSLT stylesheets to preview XML transformations
+- **Page navigation**: Browse large manuscripts by page with instant navigation
+- **Collapsible sections**: Fold/unfold pages in the editor at page breaks (`///`)
+- **Search & replace**: Find and replace text in the editor (Ctrl+H)
 - **Settings menu**: Configure theme, font size, auto-preview, and default template
 
 ## Tech Stack
@@ -59,6 +64,12 @@ bun run tauri build  # Production build
 |----------|--------|
 | Ctrl+S | Save project (.teis archive) |
 | Ctrl+O | Open project or DSL file |
+| Ctrl+F | Find in editor |
+| Ctrl+H | Find and replace |
+| Ctrl+Z | Undo (editor) |
+| Ctrl+Y | Redo (editor) |
+| Ctrl+Shift+[ | Fold section at cursor |
+| Ctrl+Shift+] | Unfold section at cursor |
 | Ctrl+Shift+Z | Undo lemmatization |
 | Ctrl+Shift+Y | Redo lemmatization |
 | F1 | Open help dialog |
@@ -77,6 +88,9 @@ See `docs/user-guide.md` for detailed usage instructions including:
 - Entity browser and custom mappings
 - Lemmatization workflow
 - Template configuration
+- Import from TEI-XML and plain text
+- XSLT preview mode
+- Page navigation for large manuscripts
 
 ## License
 

@@ -28,6 +28,30 @@ export const daisyTheme = EditorView.theme({
   ".cm-activeLine": {
     backgroundColor: "color-mix(in oklch, var(--color-base-content) 5%, transparent)",
   },
+  // Fold gutter styling
+  ".cm-foldGutter": {
+    width: "1.2em",
+  },
+  ".cm-foldGutter .cm-gutterElement": {
+    cursor: "pointer",
+    color: "var(--color-base-content)",
+    opacity: "0.5",
+    transition: "opacity 0.15s ease",
+  },
+  ".cm-foldGutter .cm-gutterElement:hover": {
+    opacity: "1",
+    color: "var(--color-primary)",
+  },
+  // Collapsed fold placeholder
+  ".cm-foldPlaceholder": {
+    backgroundColor: "color-mix(in oklch, var(--color-primary) 15%, transparent)",
+    border: "1px solid var(--color-primary)",
+    borderRadius: "0.25rem",
+    padding: "0 0.25rem",
+    margin: "0 0.25rem",
+    color: "var(--color-primary)",
+    cursor: "pointer",
+  },
 }, { dark: false }); // We let CSS vars handle dark mode via DaisyUI
 
 export const daisyHighlightStyle = HighlightStyle.define([

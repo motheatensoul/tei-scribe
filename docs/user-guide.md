@@ -26,6 +26,33 @@ Saga-Scribe uses `.teis` project archives (ZIP format) that bundle:
 
 This means you never lose your lemmatization work when saving and reopening projects.
 
+## Importing Files
+
+Saga-Scribe can import transcriptions from other formats, converting them to DSL for editing.
+
+### Import from TEI-XML
+
+1. Click **File > Import** or use the import button in the toolbar
+2. Select a `.xml` file containing TEI-encoded text
+3. The importer extracts text content from the `<body>` element
+4. Line breaks (`<lb/>`) are converted to `//` syntax
+5. Page breaks (`<pb/>`) are converted to `///` syntax with folio numbers
+
+**Note**: Complex TEI markup is simplified during import. Review the result and add DSL markup as needed.
+
+### Import from Plain Text
+
+1. Click **File > Import** or use the import button in the toolbar
+2. Select a `.txt` file
+3. The text is imported directly into the editor
+4. Add DSL markup manually for line breaks, page breaks, and editorial marks
+
+### Import Behavior
+
+- Importing replaces the current editor content
+- A confirmation dialog appears if you have unsaved changes
+- Session lemmatization data is cleared on import (start fresh with the new text)
+
 ## Settings
 
 Click the ⚙️ (gear) icon in the toolbar to open the Settings dialog.
@@ -340,8 +367,35 @@ Output:
 
 Toggle between views using the buttons in the preview header:
 
-- **Text**: Rendered view with clickable words
+- **Text**: Rendered view with clickable words for lemmatization
+- **XSLT**: Apply custom XSLT stylesheets to transform the XML output
 - **XML**: Raw TEI-XML output
+
+### Page Navigation (Text View)
+
+For manuscripts with multiple pages (defined by `///` page breaks), the Text view shows a page navigation bar:
+
+- Use **First/Prev/Next/Last** buttons to navigate between pages
+- Use the **dropdown menu** to jump directly to any page
+- The status bar shows total word count, token count, and page count
+
+Page navigation enables smooth browsing of large manuscripts without performance issues, as only the visible pages are rendered at a time.
+
+### XSLT Preview Mode
+
+The XSLT tab allows you to apply custom stylesheets to transform your TEI-XML:
+
+1. Click the **XSLT** tab in the preview header
+2. Use the **Select XSLT File** button to load a stylesheet (.xsl or .xslt)
+3. The XML is automatically transformed and displayed as HTML
+4. The selected stylesheet persists during your session
+
+This is useful for:
+- Previewing how your TEI will render in different publication formats
+- Testing transformations before export
+- Applying project-specific display conventions
+
+**Note**: XSLT transformation uses the browser's built-in XSLTProcessor and supports XSLT 1.0.
 
 ## Keyboard Shortcuts
 
@@ -354,9 +408,32 @@ Toggle between views using the buttons in the preview header:
 
 ### Editor
 
-- Standard text editing shortcuts work in the editor
-- Tab indents, Shift+Tab unindents
-- Ctrl+Z / Cmd+Z for undo
+| Shortcut | Action |
+|----------|--------|
+| Ctrl+F / Cmd+F | Find in editor |
+| Ctrl+H / Cmd+H | Find and replace |
+| Ctrl+G / Cmd+G | Find next match |
+| Ctrl+Shift+G / Cmd+Shift+G | Find previous match |
+| Ctrl+Z / Cmd+Z | Undo |
+| Ctrl+Y / Cmd+Y | Redo |
+| Tab | Indent |
+| Shift+Tab | Unindent |
+
+### Folding (Collapsible Sections)
+
+| Shortcut | Action |
+|----------|--------|
+| Ctrl+Shift+[ / Cmd+Shift+[ | Fold section at cursor |
+| Ctrl+Shift+] / Cmd+Shift+] | Unfold section at cursor |
+
+You can also click the fold markers in the gutter (▶/▼) next to page breaks (`///`) to collapse or expand sections.
+
+### Lemmatization
+
+| Shortcut | Action |
+|----------|--------|
+| Ctrl+Shift+Z / Cmd+Shift+Z | Undo lemmatization |
+| Ctrl+Shift+Y / Cmd+Shift+Y | Redo lemmatization |
 
 ## Error Panel
 

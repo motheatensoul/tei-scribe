@@ -3,6 +3,7 @@ import {
   syntaxHighlighting,
   LRLanguage,
   LanguageSupport,
+  foldService,
 } from "@codemirror/language";
 import { tags } from "@lezer/highlight";
 import { styleTags } from "@lezer/highlight";
@@ -37,7 +38,7 @@ export const teiDslHighlightStyle = HighlightStyle.define([
 ]);
 
 /**
- * Configure the parser with syntax highlighting tags
+ * Configure the parser with syntax highlighting tags and fold regions
  */
 const parserWithMetadata = parser.configure({
   props: [
@@ -107,3 +108,67 @@ export const teiDsl = new LanguageSupport(teiDslLanguage);
  * Syntax highlighting extension
  */
 export const teiDslHighlighting = syntaxHighlighting(teiDslHighlightStyle);
+
+/**
+ * Fold service for page breaks - allows folding content between /// markers
+ * This is separate from the language so it can be added as an extension
+ */
+export const teiDslFolding = foldService.of((state, lineStart, _lineEnd) => {
+  // Get the text of the current line
+  const line = state.doc.lineAt(lineStart);
+  const lineText = state.sliceDoc(line.from, line.to);
+
+  // Check if this line starts with /// (page break) but not ~/// (word continuation)
+  const trimmed = lineText.trimStart();
+  if (!trimmed.startsWith("///")) {
+    return null;
+  }
+
+  // Make sure it's not preceded by ~ on the same line
+  const prefixLength = lineText.length - trimmed.length;
+  if (prefixLength > 0 && lineText[prefixLength - 1] === "~") {
+    return null;
+  }
+
+  // Find the next /// in the document after this line
+  const docText = state.doc.toString();
+  const searchStart = line.to + 1; // Start after this line
+
+  let nextPageBreakPos: number | null = null;
+  let searchPos = searchStart;
+
+  while (searchPos < docText.length) {
+    const idx = docText.indexOf("///", searchPos);
+    if (idx === -1) break;
+
+    // Make sure it's not a word continuation (~///)
+    if (idx === 0 || docText[idx - 1] !== "~") {
+      // Also check it's at the start of a line (or after whitespace)
+      const charBefore = idx > 0 ? docText[idx - 1] : "\n";
+      if (charBefore === "\n" || charBefore === " " || charBefore === "\t") {
+        nextPageBreakPos = idx;
+        break;
+      }
+    }
+    searchPos = idx + 1;
+  }
+
+  // Calculate fold range: from end of current line to start of next page break line
+  const foldFrom = line.to;
+  let foldTo: number;
+
+  if (nextPageBreakPos !== null) {
+    // Fold to start of the line containing the next page break
+    foldTo = state.doc.lineAt(nextPageBreakPos).from;
+  } else {
+    // No next page break - fold to end of document
+    foldTo = state.doc.length;
+  }
+
+  // Only create fold if there's actual content to fold
+  if (foldTo > foldFrom + 1) {
+    return { from: foldFrom, to: foldTo };
+  }
+
+  return null;
+});
