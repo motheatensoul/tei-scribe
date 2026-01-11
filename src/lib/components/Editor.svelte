@@ -3,7 +3,7 @@
     import { EditorView, keymap, lineNumbers, highlightActiveLineGutter } from '@codemirror/view';
     import { EditorState } from '@codemirror/state';
     import { defaultKeymap, history, historyKeymap, undo, redo } from '@codemirror/commands';
-    import { search, searchKeymap, openSearchPanel } from '@codemirror/search';
+    import { search, searchKeymap, openSearchPanel, closeSearchPanel, searchPanelOpen } from '@codemirror/search';
     import { editor } from '$lib/stores/editor';
     import { teiDsl, teiDslHighlighting } from '$lib/parser/highlighter';
     import { teiLinter } from '$lib/parser/linter';
@@ -88,8 +88,14 @@
 
     export function triggerSearch() {
         if (view) {
-            openSearchPanel(view);
-            view.focus(); // Focus might be stolen by the search panel input, but openSearchPanel usually handles it.
+            // Check if search panel is already open
+            if (searchPanelOpen(view.state)) {
+                closeSearchPanel(view);
+                view.focus();
+            } else {
+                openSearchPanel(view);
+                // The search panel automatically focuses itself on open
+            }
         }
     }
 </script>
