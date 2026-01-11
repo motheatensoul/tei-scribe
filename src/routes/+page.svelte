@@ -642,9 +642,6 @@
         if (!path) return;
 
         isImporting = true;
-        
-        // Give the UI a moment to render the spinner
-        await new Promise(resolve => setTimeout(resolve, 50));
 
         try {
             const pathStr = path as string;
