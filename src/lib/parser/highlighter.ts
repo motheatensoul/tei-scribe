@@ -8,7 +8,6 @@ import {
 import { tags } from "@lezer/highlight";
 import { styleTags } from "@lezer/highlight";
 import { parser } from "./tei-dsl-parser.js";
-import { syntaxTree } from "@codemirror/language";
 
 /**
  * TEI-DSL syntax highlighting styles using CSS classes for theme compatibility
@@ -88,30 +87,39 @@ const parserWithMetadata = parser.configure({
     // Fold regions at page breaks - each page break folds content until next page break
     foldNodeProp.add({
       PageBreak: (node, state) => {
-        // Get the end of the current line (after the page break marker)
+        // Get the end of the current line (after the page break marker like ///1r)
         const lineEnd = state.doc.lineAt(node.to).to;
 
-        // Search for the next PageBreak in the document
-        const tree = syntaxTree(state);
-        let nextPageBreakStart: number | null = null;
+        // Search for next "///" pattern in the document text after current position
+        const docText = state.doc.toString();
+        const searchStart = node.to;
 
-        tree.iterate({
-          from: node.to,
-          enter: (iterNode) => {
-            if (iterNode.name === "PageBreak" && iterNode.from > node.to) {
-              // Found next page break - get start of its line
-              nextPageBreakStart = state.doc.lineAt(iterNode.from).from;
-              return false; // Stop iteration
-            }
+        // Find next /// that starts a page break (not a word continuation ~///)
+        let nextPageBreakPos: number | null = null;
+        let searchPos = searchStart;
+
+        while (searchPos < docText.length) {
+          const idx = docText.indexOf("///", searchPos);
+          if (idx === -1) break;
+
+          // Make sure it's not a word continuation (~///)
+          if (idx === 0 || docText[idx - 1] !== "~") {
+            nextPageBreakPos = idx;
+            break;
           }
-        });
+          searchPos = idx + 1;
+        }
 
-        // If we found another page break, fold to just before it
-        // Otherwise fold to end of document
-        const foldEnd = nextPageBreakStart ?? state.doc.length;
+        // Fold to start of next page break line, or end of document
+        let foldEnd: number;
+        if (nextPageBreakPos !== null) {
+          foldEnd = state.doc.lineAt(nextPageBreakPos).from;
+        } else {
+          foldEnd = state.doc.length;
+        }
 
-        // Only create fold if there's content to fold (at least one line)
-        if (foldEnd > lineEnd) {
+        // Only create fold if there's content to fold (at least one character after line end)
+        if (foldEnd > lineEnd + 1) {
           return { from: lineEnd, to: foldEnd };
         }
         return null;
