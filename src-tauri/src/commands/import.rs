@@ -7,7 +7,7 @@ use std::path::Path;
 /// This command is async, which means Tauri executes it on a separate async task
 /// (not the main thread), preventing UI blocking. The actual file I/O and parsing
 /// runs on a blocking thread pool via spawn_blocking.
-#[tauri::command]
+#[tauri::command(async)]
 pub async fn import_file(path: String) -> Result<String, String> {
     // spawn_blocking moves the CPU-bound work to a thread pool,
     // while the async command itself runs off the main thread
