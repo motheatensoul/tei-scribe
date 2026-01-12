@@ -36,6 +36,13 @@
 - **Formatting:** 4 spaces indentation.
 - **Naming:** PascalCase for components (`Editor.svelte`), camelCase for functions/vars.
 - **Visual Style:** Refer to docs/UI_STANDARDS.md for our UI masterdoc. Style every new component as described.
+- **Accessibility (a11y):** All components MUST pass Svelte's a11y checks (`bun run check` must show 0 warnings). This is not optional.
+  - Use semantic HTML elements (`<button>`, `<nav>`, `<main>`, etc.)
+  - All form inputs must have associated labels (use `for`/`id` or wrap in `<label>`)
+  - For control groups, use `role="group"` with `aria-labelledby`
+  - Interactive elements must be keyboard accessible
+  - Images need `alt` attributes
+  - Exception: Modal backdrop click-to-dismiss does not require keyboard equivalent
 
 ### Backend (Rust)
 - **Style:** Standard Rust idioms (`rustfmt`). 4 spaces indentation.
