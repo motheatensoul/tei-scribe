@@ -1,5 +1,6 @@
 use crate::dictionary::{InflectedForm, InflectionStore, OnpEntry, OnpFullEntry, OnpRegistry};
-use log::{error, info};
+use crate::errors::{Result, SagaError};
+use log::info;
 use std::sync::Mutex;
 use tauri::{AppHandle, State};
 
@@ -11,14 +12,11 @@ pub struct InflectionState(pub Mutex<Option<InflectionStore>>);
 
 /// Load ONP headwords from a JSON file
 #[tauri::command]
-pub fn load_onp_headwords(path: String, state: State<OnpState>) -> Result<usize, String> {
+pub fn load_onp_headwords(path: String, state: State<OnpState>) -> Result<usize> {
     info!("Loading ONP headwords from: {}", path);
 
     let mut registry = OnpRegistry::new();
-    registry.load_from_file(&path).map_err(|e| {
-        error!("Failed to load ONP headwords: {}", e);
-        e
-    })?;
+    registry.load_from_file(&path).map_err(SagaError::Validation)?;
 
     let count = registry.len();
     info!("Loaded {} ONP headwords", count);
@@ -29,9 +27,9 @@ pub fn load_onp_headwords(path: String, state: State<OnpState>) -> Result<usize,
 
 /// Look up lemma candidates for a wordform
 #[tauri::command]
-pub fn lookup_lemma(wordform: String, state: State<OnpState>) -> Result<Vec<OnpEntry>, String> {
+pub fn lookup_lemma(wordform: String, state: State<OnpState>) -> Result<Vec<OnpEntry>> {
     let guard = state.0.lock().unwrap();
-    let registry = guard.as_ref().ok_or("ONP registry not loaded")?;
+    let registry = guard.as_ref().ok_or_else(|| SagaError::Internal("ONP registry not loaded".to_string()))?;
 
     let results = registry.lookup_lemma(&wordform);
     Ok(results.into_iter().cloned().collect())
@@ -43,9 +41,9 @@ pub fn search_lemma_prefix(
     prefix: String,
     limit: usize,
     state: State<OnpState>,
-) -> Result<Vec<OnpEntry>, String> {
+) -> Result<Vec<OnpEntry>> {
     let guard = state.0.lock().unwrap();
-    let registry = guard.as_ref().ok_or("ONP registry not loaded")?;
+    let registry = guard.as_ref().ok_or_else(|| SagaError::Internal("ONP registry not loaded".to_string()))?;
 
     let results = registry.search_prefix(&prefix, limit);
     Ok(results.into_iter().cloned().collect())
@@ -53,31 +51,30 @@ pub fn search_lemma_prefix(
 
 /// Get a specific ONP entry by ID
 #[tauri::command]
-pub fn get_onp_entry(id: String, state: State<OnpState>) -> Result<Option<OnpEntry>, String> {
+pub fn get_onp_entry(id: String, state: State<OnpState>) -> Result<Option<OnpEntry>> {
     let guard = state.0.lock().unwrap();
-    let registry = guard.as_ref().ok_or("ONP registry not loaded")?;
+    let registry = guard.as_ref().ok_or_else(|| SagaError::Internal("ONP registry not loaded".to_string()))?;
 
     Ok(registry.get_by_id(&id).cloned())
 }
 
 /// Fetch full entry data from ONP API
 #[tauri::command]
-pub async fn fetch_onp_full_entry(id: String) -> Result<OnpFullEntry, String> {
+pub async fn fetch_onp_full_entry(id: String) -> Result<OnpFullEntry> {
     let url = format!("https://onp.ku.dk/json/onp/{}", id);
     info!("Fetching ONP entry: {}", url);
 
     let response = reqwest::get(&url)
-        .await
-        .map_err(|e| format!("Failed to fetch: {}", e))?;
+        .await?;
 
     if !response.status().is_success() {
-        return Err(format!("ONP API returned status: {}", response.status()));
+        // Just treat non-200 as a validation/API error for now
+        return Err(SagaError::Network(response.error_for_status().unwrap_err()));
     }
 
     let entry: OnpFullEntry = response
         .json()
-        .await
-        .map_err(|e| format!("Failed to parse response: {}", e))?;
+        .await?;
 
     Ok(entry)
 }
@@ -87,9 +84,9 @@ pub async fn fetch_onp_full_entry(id: String) -> Result<OnpFullEntry, String> {
 pub fn load_inflections(
     app: AppHandle,
     state: State<InflectionState>,
-) -> Result<InflectionStore, String> {
+) -> Result<InflectionStore> {
     info!("Loading inflection mappings");
-    let store = InflectionStore::load(&app)?;
+    let store = InflectionStore::load(&app).map_err(SagaError::Internal)?;
     // Cache the loaded store
     *state.0.lock().unwrap() = Some(store.clone());
     Ok(store)
@@ -101,13 +98,13 @@ pub fn lookup_inflection(
     app: AppHandle,
     wordform: String,
     state: State<InflectionState>,
-) -> Result<Vec<InflectedForm>, String> {
+) -> Result<Vec<InflectedForm>> {
     let mut guard = state.0.lock().unwrap();
     
     // Lazy-load if cache is empty
     if guard.is_none() {
         info!("Inflection cache miss, loading from disk");
-        *guard = Some(InflectionStore::load(&app)?);
+        *guard = Some(InflectionStore::load(&app).map_err(SagaError::Internal)?);
     }
     
     let store = guard.as_ref().unwrap();
@@ -130,7 +127,7 @@ pub fn add_inflection(
     diplomatic: Option<String>,
     normalized: Option<String>,
     state: State<InflectionState>,
-) -> Result<(), String> {
+) -> Result<()> {
     info!(
         "Adding inflection: {} -> {} ({}) [facs: {:?}, dipl: {:?}, norm: {:?}]",
         wordform, lemma, analysis, facsimile, diplomatic, normalized
@@ -140,7 +137,7 @@ pub fn add_inflection(
     
     // Lazy-load if cache is empty
     if guard.is_none() {
-        *guard = Some(InflectionStore::load(&app)?);
+        *guard = Some(InflectionStore::load(&app).map_err(SagaError::Internal)?);
     }
     
     let store = guard.as_mut().unwrap();
@@ -156,7 +153,7 @@ pub fn add_inflection(
             normalized,
         },
     );
-    store.save(&app)
+    store.save(&app).map_err(SagaError::Internal)
 }
 
 /// Remove an inflection mapping (updates both disk and cache)
@@ -167,7 +164,7 @@ pub fn remove_inflection(
     onp_id: String,
     analysis: String,
     state: State<InflectionState>,
-) -> Result<(), String> {
+) -> Result<()> {
     info!(
         "Removing inflection: {} ({}, {})",
         wordform, onp_id, analysis
@@ -177,12 +174,12 @@ pub fn remove_inflection(
     
     // Lazy-load if cache is empty
     if guard.is_none() {
-        *guard = Some(InflectionStore::load(&app)?);
+        *guard = Some(InflectionStore::load(&app).map_err(SagaError::Internal)?);
     }
     
     let store = guard.as_mut().unwrap();
     store.remove(&wordform, &onp_id, &analysis);
-    store.save(&app)
+    store.save(&app).map_err(SagaError::Internal)
 }
 
 /// Clear all inflection mappings (updates both disk and cache)
@@ -190,14 +187,14 @@ pub fn remove_inflection(
 pub fn clear_inflections(
     app: AppHandle,
     state: State<InflectionState>,
-) -> Result<(), String> {
+) -> Result<()> {
     info!("Clearing all inflection mappings");
 
     let mut guard = state.0.lock().unwrap();
     
     // Create fresh empty store
     let store = InflectionStore::new();
-    store.save(&app)?;
+    store.save(&app).map_err(SagaError::Internal)?;
     
     // Update cache
     *guard = Some(store);
@@ -212,9 +209,9 @@ pub fn is_onp_loaded(state: State<OnpState>) -> bool {
 
 /// Get ONP registry stats
 #[tauri::command]
-pub fn get_onp_stats(state: State<OnpState>) -> Result<(usize, usize), String> {
+pub fn get_onp_stats(state: State<OnpState>) -> Result<(usize, usize)> {
     let guard = state.0.lock().unwrap();
-    let registry = guard.as_ref().ok_or("ONP registry not loaded")?;
+    let registry = guard.as_ref().ok_or_else(|| SagaError::Internal("ONP registry not loaded".to_string()))?;
     Ok((registry.len(), 0)) // (headword count, placeholder for future stats)
 }
 
@@ -224,21 +221,21 @@ pub fn export_inflections(
     app: AppHandle,
     path: String,
     state: State<InflectionState>,
-) -> Result<usize, String> {
+) -> Result<usize> {
     info!("Exporting inflection dictionary to: {}", path);
 
     let mut guard = state.0.lock().unwrap();
     
     // Lazy-load if cache is empty
     if guard.is_none() {
-        *guard = Some(InflectionStore::load(&app)?);
+        *guard = Some(InflectionStore::load(&app).map_err(SagaError::Internal)?);
     }
     
     let store = guard.as_ref().unwrap();
     let count = store.entry_count();
 
-    let content = serde_json::to_string_pretty(&store).map_err(|e| e.to_string())?;
-    std::fs::write(&path, content).map_err(|e| format!("Failed to write file: {}", e))?;
+    let content = serde_json::to_string_pretty(&store)?;
+    std::fs::write(&path, content)?;
 
     info!("Exported {} inflection entries", count);
     Ok(count)

@@ -1,9 +1,9 @@
-mod ast;
-mod compiler;
-mod lexer;
-mod wordtokenizer;
+pub mod ast;
+pub mod lexer;
+pub mod compiler;
+pub mod wordtokenizer;
 
 #[cfg(test)]
 mod tests;
 
-pub use compiler::{Compiler, CompilerConfig, LemmaMapping};
+pub use self::compiler::{Compiler, CompilerConfig, LemmaMapping};

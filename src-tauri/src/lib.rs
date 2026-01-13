@@ -2,12 +2,14 @@ mod annotations;
 mod commands;
 mod dictionary;
 pub mod entities;
+pub mod errors;
 mod importer;
 pub mod metadata;
 mod normalizer;
 mod parser;
 mod settings;
 mod template;
+mod utils;
 mod validator;
 
 use commands::dictionary::{InflectionState, OnpState};

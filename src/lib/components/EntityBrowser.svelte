@@ -1,5 +1,6 @@
 <script lang="ts">
-    import { entityStore, entityNames, type Entity } from '$lib/stores/entities';
+    import { entityStore } from '$lib/stores/entities.svelte';
+    import type { Entity } from '$lib/types/entities';
     import { 
         saveEntityMapping, 
         removeEntityMapping,
@@ -32,7 +33,7 @@
     // Get unique categories
     const categories = $derived.by(() => {
         const cats = new Set<string>();
-        for (const entity of Object.values($entityStore.entities)) {
+        for (const entity of Object.values(entityStore.entities)) {
             if (entity.category) cats.add(entity.category);
         }
         return Array.from(cats).sort();
@@ -41,7 +42,7 @@
     // Filter entities based on search and category
     const filteredEntities = $derived.by(() => {
         const query = searchQuery.toLowerCase();
-        return Object.entries($entityStore.entities)
+        return Object.entries(entityStore.entities)
             .filter(([name, entity]) => {
                 const matchesSearch =
                     !query ||
@@ -64,7 +65,7 @@
         } else {
             selectedEntity = name;
             // Initialize editing value with custom mapping, base mapping, or entity char
-            editingTranslation = $entityStore.customMappings[name] ?? $entityStore.baseMappings[name] ?? $entityStore.entities[name]?.char ?? '';
+            editingTranslation = entityStore.customMappings[name] ?? entityStore.baseMappings[name] ?? entityStore.entities[name]?.char ?? '';
         }
     }
 
@@ -84,7 +85,7 @@
             await removeEntityMapping(name);
             entityStore.removeCustomMapping(name);
             // Reset editing field to base mapping or original char
-            editingTranslation = $entityStore.baseMappings[name] ?? $entityStore.entities[name]?.char ?? '';
+            editingTranslation = entityStore.baseMappings[name] ?? entityStore.entities[name]?.char ?? '';
         } catch (e) {
             console.error('Failed to remove mapping:', e);
         }
@@ -122,7 +123,7 @@
 
         try {
             // Check if name already exists (unless we're editing that same entity)
-            const nameExists = newEntityName in $entityStore.entities;
+            const nameExists = newEntityName in entityStore.entities;
             const isEditingSameName = editingEntityName === newEntityName;
 
             if (nameExists && !isEditingSameName) {
@@ -192,7 +193,7 @@
     }
 
     function handleEditEntity(name: string) {
-        const entity = $entityStore.customEntities[name];
+        const entity = entityStore.customEntities[name];
         if (!entity) return;
 
         // Pre-fill form with existing values
@@ -347,14 +348,14 @@
         </select>
     </div>
 
-    {#if !$entityStore.loaded}
+    {#if !entityStore.loaded}
         <div class="text-center py-8 opacity-70">Loading entities...</div>
-    {:else if $entityStore.error}
-        <div class="text-center py-8 text-error">{$entityStore.error}</div>
+    {:else if entityStore.error}
+        <div class="text-center py-8 text-error">{entityStore.error}</div>
     {:else}
         <div class="overflow-y-auto max-h-96 -mx-2" role="listbox" aria-label="Entity list">
             {#each filteredEntities as [name, entity]}
-                {@const hasCustomMapping = name in $entityStore.customMappings}
+                {@const hasCustomMapping = name in entityStore.customMappings}
                 {@const isSelected = selectedEntity === name}
                 <div class="border-b border-base-200 last:border-b-0">
                     <div
@@ -370,7 +371,7 @@
                         <span class="row-span-2 text-2xl flex items-center justify-center" style="font-family: 'Junicode', serif;">{entity.char}</span>
                         <span class="font-mono text-sm text-primary font-medium flex items-center gap-2">
                             :{name}:
-                            {#if name in $entityStore.customEntities}
+                            {#if name in entityStore.customEntities}
                                 <span class="badge badge-xs badge-secondary">user</span>
                             {/if}
                             {#if hasCustomMapping}
@@ -378,7 +379,7 @@
                             {/if}
                         </span>
                         <div class="row-span-2 flex items-center gap-1">
-                            {#if name in $entityStore.customEntities}
+                            {#if name in entityStore.customEntities}
                                 <button
                                     class="btn btn-ghost btn-xs opacity-0 group-hover:opacity-100 transition-opacity"
                                     onclick={(e) => { e.stopPropagation(); handleEditEntity(name); }}
@@ -428,7 +429,7 @@
                                 {/if}
                             </div>
                             <div class="text-xs opacity-50 mt-1">
-                                Default: {$entityStore.baseMappings[name] ?? entity.char} | Char: {entity.char} | Unicode: {entity.unicode}
+                                Default: {entityStore.baseMappings[name] ?? entity.char} | Char: {entity.char} | Unicode: {entity.unicode}
                             </div>
                         </div>
                     {/if}
@@ -441,8 +442,8 @@
 
     <div class="pt-4 border-t border-base-300 text-xs opacity-70">
         {filteredEntities.length} entities
-        {#if Object.keys($entityStore.customMappings).length > 0}
-            | {Object.keys($entityStore.customMappings).length} custom mappings
+        {#if Object.keys(entityStore.customMappings).length > 0}
+            | {Object.keys(entityStore.customMappings).length} custom mappings
         {/if}
     </div>
 </div>

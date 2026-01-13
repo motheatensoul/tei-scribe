@@ -1,4 +1,5 @@
 use crate::annotations::AnnotationSet;
+use crate::errors::Result;
 use crate::metadata::Metadata;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -15,31 +16,34 @@ pub struct FileContent {
 }
 
 #[tauri::command]
-pub fn open_file(path: String) -> Result<FileContent, String> {
-    let content = fs::read_to_string(&path).map_err(|e| e.to_string())?;
+pub fn open_file(path: String) -> Result<FileContent> {
+    let content = fs::read_to_string(&path)?;
     Ok(FileContent { path, content })
 }
 
 #[tauri::command]
-pub fn load_text_file(path: String) -> Result<String, String> {
-    fs::read_to_string(&path).map_err(|e| e.to_string())
+pub fn load_text_file(path: String) -> Result<String> {
+    Ok(fs::read_to_string(&path)?)
 }
 
 #[tauri::command]
-pub fn save_file(path: String, content: String) -> Result<(), String> {
-    fs::write(&path, &content).map_err(|e| e.to_string())
+pub fn save_file(path: String, content: String) -> Result<()> {
+    fs::write(&path, &content)?;
+    Ok(())
 }
 
 #[tauri::command]
-pub fn export_tei(path: String, tei_content: String) -> Result<(), String> {
+pub fn export_tei(path: String, tei_content: String) -> Result<()> {
     let path = PathBuf::from(path);
-    fs::write(&path, &tei_content).map_err(|e| e.to_string())
+    fs::write(&path, &tei_content)?;
+    Ok(())
 }
 
 #[tauri::command]
-pub fn export_html(path: String, html_content: String) -> Result<(), String> {
+pub fn export_html(path: String, html_content: String) -> Result<()> {
     let path = PathBuf::from(path);
-    fs::write(&path, &html_content).map_err(|e| e.to_string())
+    fs::write(&path, &html_content)?;
+    Ok(())
 }
 
 // Project archive format (.teis)
@@ -89,46 +93,36 @@ pub fn save_project(
     template_id: String,
     metadata_json: Option<String>,
     annotations_json: Option<String>,
-) -> Result<(), String> {
+) -> Result<()> {
     let path = PathBuf::from(&path);
-    let file = File::create(&path).map_err(|e| format!("Failed to create file: {}", e))?;
+    let file = File::create(&path)?;
     let mut zip = ZipWriter::new(file);
     let options = SimpleFileOptions::default()
         .compression_method(zip::CompressionMethod::Deflated)
         .unix_permissions(0o644);
 
     // Write source.dsl
-    zip.start_file("source.dsl", options)
-        .map_err(|e| format!("Failed to start source.dsl: {}", e))?;
-    zip.write_all(source.as_bytes())
-        .map_err(|e| format!("Failed to write source.dsl: {}", e))?;
+    zip.start_file("source.dsl", options)?;
+    zip.write_all(source.as_bytes())?;
 
     // Write output.xml
-    zip.start_file("output.xml", options)
-        .map_err(|e| format!("Failed to start output.xml: {}", e))?;
-    zip.write_all(output.as_bytes())
-        .map_err(|e| format!("Failed to write output.xml: {}", e))?;
+    zip.start_file("output.xml", options)?;
+    zip.write_all(output.as_bytes())?;
 
     // Write confirmations.json (backward compat for older app versions)
-    zip.start_file("confirmations.json", options)
-        .map_err(|e| format!("Failed to start confirmations.json: {}", e))?;
-    zip.write_all(confirmations_json.as_bytes())
-        .map_err(|e| format!("Failed to write confirmations.json: {}", e))?;
+    zip.start_file("confirmations.json", options)?;
+    zip.write_all(confirmations_json.as_bytes())?;
 
     // Write annotations.json (new in v1.2, full annotation set)
     if let Some(ref ann_json) = annotations_json {
-        zip.start_file("annotations.json", options)
-            .map_err(|e| format!("Failed to start annotations.json: {}", e))?;
-        zip.write_all(ann_json.as_bytes())
-            .map_err(|e| format!("Failed to write annotations.json: {}", e))?;
+        zip.start_file("annotations.json", options)?;
+        zip.write_all(ann_json.as_bytes())?;
     }
 
     // Write metadata.json if provided
     if let Some(ref meta_json) = metadata_json {
-        zip.start_file("metadata.json", options)
-            .map_err(|e| format!("Failed to start metadata.json: {}", e))?;
-        zip.write_all(meta_json.as_bytes())
-            .map_err(|e| format!("Failed to write metadata.json: {}", e))?;
+        zip.start_file("metadata.json", options)?;
+        zip.write_all(meta_json.as_bytes())?;
     }
 
     // Create and write manifest.json
@@ -139,24 +133,20 @@ pub fn save_project(
         created: now.clone(),
         modified: now,
     };
-    let manifest_json =
-        serde_json::to_string_pretty(&manifest).map_err(|e| format!("Failed to serialize manifest: {}", e))?;
-    zip.start_file("manifest.json", options)
-        .map_err(|e| format!("Failed to start manifest.json: {}", e))?;
-    zip.write_all(manifest_json.as_bytes())
-        .map_err(|e| format!("Failed to write manifest.json: {}", e))?;
+    let manifest_json = serde_json::to_string_pretty(&manifest)?;
+    zip.start_file("manifest.json", options)?;
+    zip.write_all(manifest_json.as_bytes())?;
 
-    zip.finish()
-        .map_err(|e| format!("Failed to finalize archive: {}", e))?;
+    zip.finish()?;
 
     Ok(())
 }
 
 #[tauri::command]
-pub fn open_project(path: String) -> Result<ProjectData, String> {
+pub fn open_project(path: String) -> Result<ProjectData> {
     let path = PathBuf::from(&path);
-    let file = File::open(&path).map_err(|e| format!("Failed to open file: {}", e))?;
-    let mut archive = ZipArchive::new(file).map_err(|e| format!("Failed to read archive: {}", e))?;
+    let file = File::open(&path)?;
+    let mut archive = ZipArchive::new(file)?;
 
     // Read source.dsl
     let source = read_zip_file(&mut archive, "source.dsl")?;
@@ -166,13 +156,11 @@ pub fn open_project(path: String) -> Result<ProjectData, String> {
 
     // Read confirmations.json (always present for backward compat)
     let confirmations_str = read_zip_file(&mut archive, "confirmations.json")?;
-    let confirmations: HashMap<u32, LemmaConfirmation> = serde_json::from_str(&confirmations_str)
-        .map_err(|e| format!("Failed to parse confirmations.json: {}", e))?;
+    let confirmations: HashMap<u32, LemmaConfirmation> = serde_json::from_str(&confirmations_str)?;
 
     // Read manifest.json
     let manifest_str = read_zip_file(&mut archive, "manifest.json")?;
-    let manifest: ProjectManifest = serde_json::from_str(&manifest_str)
-        .map_err(|e| format!("Failed to parse manifest.json: {}", e))?;
+    let manifest: ProjectManifest = serde_json::from_str(&manifest_str)?;
 
     // Read metadata.json (optional, new in v1.1)
     let metadata: Option<Metadata> = match read_zip_file(&mut archive, "metadata.json") {
@@ -199,13 +187,10 @@ pub fn open_project(path: String) -> Result<ProjectData, String> {
 fn read_zip_file<R: Read + std::io::Seek>(
     archive: &mut ZipArchive<R>,
     name: &str,
-) -> Result<String, String> {
-    let mut file = archive
-        .by_name(name)
-        .map_err(|e| format!("Failed to find {} in archive: {}", name, e))?;
+) -> Result<String> {
+    let mut file = archive.by_name(name)?;
     let mut contents = String::new();
-    file.read_to_string(&mut contents)
-        .map_err(|e| format!("Failed to read {}: {}", name, e))?;
+    file.read_to_string(&mut contents)?;
     Ok(contents)
 }
 

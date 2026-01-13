@@ -1,6 +1,6 @@
 <script lang="ts">
-    import { settings } from "$lib/stores/settings";
-    import { templateStore } from "$lib/stores/template";
+    import { settings } from "$lib/stores/settings.svelte";
+    import { templateStore } from "$lib/stores/template.svelte";
 
     //Icons
     import { X as CloseButton } from "@lucide/svelte";
@@ -13,22 +13,24 @@
 
     // Local state for editing (only commit on save)
     let localSettings = $state({
-        fontSize: $settings.fontSize,
-        theme: $settings.theme,
-        autoPreview: $settings.autoPreview,
-        previewDelay: $settings.previewDelay,
-        activeTemplateId: $settings.activeTemplateId,
+        fontSize: settings.fontSize,
+        theme: settings.theme,
+        autoPreview: settings.autoPreview,
+        previewDelay: settings.previewDelay,
+        activeTemplateId: settings.activeTemplateId,
+        autoSave: settings.autoSave,
     });
 
     // Sync local state when dialog opens
     $effect(() => {
         if (isopen) {
             localSettings = {
-                fontSize: $settings.fontSize,
-                theme: $settings.theme,
-                autoPreview: $settings.autoPreview,
-                previewDelay: $settings.previewDelay,
-                activeTemplateId: $settings.activeTemplateId,
+                fontSize: settings.fontSize,
+                theme: settings.theme,
+                autoPreview: settings.autoPreview,
+                previewDelay: settings.previewDelay,
+                activeTemplateId: settings.activeTemplateId,
+                autoSave: settings.autoSave,
             };
         }
     });
@@ -156,6 +158,23 @@
                             Editor
                         </h3>
                         <div class="space-y-4">
+                            <!-- Auto Save -->
+                            <div class="form-control">
+                                <label class="label cursor-pointer justify-start gap-4 p-0">
+                                    <input
+                                        type="checkbox"
+                                        bind:checked={localSettings.autoSave}
+                                        class="checkbox checkbox-primary"
+                                    />
+                                    <div class="flex flex-col">
+                                        <span class="label-text font-medium">Auto-save</span>
+                                        <span class="label-text-alt text-base-content/60">
+                                            Automatically save project changes
+                                        </span>
+                                    </div>
+                                </label>
+                            </div>
+
                             <!-- Auto Preview -->
                             <div class="form-control">
                                 <label class="label cursor-pointer justify-start gap-4 p-0">
@@ -222,7 +241,7 @@
                                 bind:value={localSettings.activeTemplateId}
                             >
                                 <option value={null}>None</option>
-                                {#each $templateStore.templates as template}
+                                {#each templateStore.templates as template}
                                     <option value={template.id}
                                         >{template.name}</option
                                     >

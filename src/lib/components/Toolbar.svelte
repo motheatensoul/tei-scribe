@@ -1,9 +1,8 @@
 <script lang="ts">
-    import { open, save } from "@tauri-apps/plugin-dialog";
-    import { editor, fileName } from "$lib/stores/editor";
-    import { templateStore } from "$lib/stores/template";
-    import { settings } from "$lib/stores/settings";
-    import { canUndo, canRedo } from "$lib/stores/lemmatizationHistory";
+    import { editor } from "$lib/stores/editor.svelte";
+    import { templateStore } from "$lib/stores/template.svelte";
+    import { settings } from "$lib/stores/settings.svelte";
+    import { annotationHistory } from "$lib/stores/annotations.svelte";
 
     //Icons
     import {
@@ -28,27 +27,27 @@
         onredo,
         onsettings,
         onhelp,
+        ontemplatechange,
     }: {
-        onopen?: () => void; // Parent handles opening (shows dialog, loads project)
-        onimport?: () => void; // Parent handles importing (shows dialog, converts content)
-        onsave?: () => void; // Parent handles saving (shows dialog if needed, saves project)
-        onexportxml?: () => void; // Parent handles XML export
-        onexportdict?: () => void; // Parent handles dictionary export
-        onexporthtml?: () => void; // Parent handles HTML export
-        onexportpdf?: () => void; // Parent handles PDF export
-        onundo?: () => void; // Undo lemmatization
-        onredo?: () => void; // Redo lemmatization
-        onsettings?: () => void; // Open settings dialog
-        onhelp?: () => void; // Open help dialog
+        onopen?: () => void;
+        onimport?: () => void;
+        onsave?: () => void;
+        onexportxml?: () => void;
+        onexportdict?: () => void;
+        onexporthtml?: () => void;
+        onexportpdf?: () => void;
+        onundo?: () => void;
+        onredo?: () => void;
+        onsettings?: () => void;
+        onhelp?: () => void;
+        ontemplatechange?: (id: string) => void;
     } = $props();
 
     async function handleTemplateChange(e: Event) {
         const select = e.target as HTMLSelectElement;
-        const templates = $templateStore.templates;
-        const template = templates.find((t) => t.id === select.value);
-        if (template) {
-            templateStore.setActive(template);
-            settings.update({ activeTemplateId: template.id });
+        const id = select.value;
+        if (ontemplatechange) {
+            ontemplatechange(id);
         }
     }
 </script>
@@ -94,11 +93,12 @@
     <div class="flex items-center gap-2 ml-4">
         <span class="text-xs xl:text-sm font-bold">Template:</span>
         <select
-            class="select select-sm select-bordered bg-neutral-focus text-primary text-xs lg:text-sm font-bold"
+            class="select select-bordered select-sm xl:select-md"
+            value={templateStore.active?.id ?? ""}
             onchange={handleTemplateChange}
-            value={$templateStore.active?.id ?? ""}
         >
-            {#each $templateStore.templates as template}
+            <option value="" disabled>Select Template</option>
+            {#each templateStore.templates as template}
                 <option value={template.id}>{template.name}</option>
             {/each}
         </select>
@@ -108,7 +108,7 @@
         <button
             class="btn btn-ghost btn-sm xl:btn-md"
             onclick={onundo}
-            disabled={!$canUndo}
+            disabled={!annotationHistory.canUndo}
             title="Undo lemmatization (Ctrl+Shift+Z)"
         >
             <UndoIcon size="18" />Lemma Undo
@@ -116,7 +116,7 @@
         <button
             class="btn btn-ghost btn-sm xl:btn-md"
             onclick={onredo}
-            disabled={!$canRedo}
+            disabled={!annotationHistory.canRedo}
             title="Redo lemmatization (Ctrl+Shift+Y)"
         >
             <RedoIcon size="18" />Lemma Redo
@@ -138,8 +138,8 @@
         >
             <SettingsIcon size="18" />
         </button>
-        <span class="text-sm opacity-70 xl:text-md">{$fileName}</span>
-        {#if $editor.isDirty}
+        <span class="text-sm opacity-70 xl:text-md">{editor.fileName}</span>
+        {#if editor.isDirty}
             <span class="text-warning font-bold">*</span>
         {/if}
     </div>

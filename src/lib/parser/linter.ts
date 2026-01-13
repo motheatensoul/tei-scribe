@@ -5,10 +5,9 @@ import {
     type ValidationResult, 
     type ValidationError 
 } from "$lib/tauri";
-import { templateStore } from "$lib/stores/template";
-import { entityStore } from "$lib/stores/entities";
-import { validationStore } from "$lib/stores/validation";
-import { get } from "svelte/store";
+import { templateStore } from "$lib/stores/template.svelte";
+import { entityStore } from "$lib/stores/entities.svelte";
+import { validationStore } from "$lib/stores/validation.svelte";
 
 // Debounce timer
 let validationTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -33,8 +32,7 @@ export const teiLinter = linter(async (view) => {
 
             // 1. Entity Validation
             // Check for entity patterns :name: and verify they exist in loaded entities
-            const entStore = get(entityStore);
-            if (entStore.loaded) {
+            if (entityStore.loaded) {
                 const entityRegex = /:([a-zA-Z][a-zA-Z0-9]*):/g;
                 let match;
                 while ((match = entityRegex.exec(content)) !== null) {
@@ -43,7 +41,7 @@ export const teiLinter = linter(async (view) => {
                     const from = match.index;
                     const to = from + match[0].length;
                     
-                    if (!entStore.entities[name]) {
+                    if (!entityStore.entities[name]) {
                         diagnostics.push({
                             from,
                             to,
@@ -56,8 +54,7 @@ export const teiLinter = linter(async (view) => {
 
             try {
                 // Get active template to determine schema and structure
-                const store = get(templateStore);
-                const activeTemplate = store.active;
+                const activeTemplate = templateStore.active;
 
                 let header = `<?xml version="1.0" encoding="UTF-8"?>
 <TEI xmlns="http://www.tei-c.org/ns/1.0">

@@ -1,16 +1,17 @@
+use crate::errors::{Result, SagaError};
 use crate::settings::{Settings, SettingsManager};
 use tauri::AppHandle;
 
 #[tauri::command]
-pub fn load_settings(app: AppHandle) -> Result<Settings, String> {
-    let manager = SettingsManager::new(&app)?;
+pub fn load_settings(app: AppHandle) -> Result<Settings> {
+    let manager = SettingsManager::new(&app).map_err(SagaError::Internal)?;
     Ok(manager.load())
 }
 
 #[tauri::command]
-pub fn save_settings(app: AppHandle, settings: Settings) -> Result<(), String> {
-    let manager = SettingsManager::new(&app)?;
-    manager.save(&settings)
+pub fn save_settings(app: AppHandle, settings: Settings) -> Result<()> {
+    let manager = SettingsManager::new(&app).map_err(SagaError::Internal)?;
+    manager.save(&settings).map_err(SagaError::Internal)
 }
 
 #[tauri::command]
@@ -176,13 +177,13 @@ pub fn get_system_theme() -> String {
 }
 
 #[tauri::command]
-pub async fn set_window_theme(app: tauri::AppHandle, theme: String) -> Result<(), String> {
+pub async fn set_window_theme(app: tauri::AppHandle, theme: String) -> Result<()> {
     use tauri::Manager;
 
     // Get the main window
     let window = app
         .get_webview_window("main")
-        .ok_or_else(|| "Failed to get main window".to_string())?;
+        .ok_or_else(|| SagaError::Internal("Failed to get main window".to_string()))?;
 
     // Determine the theme to apply
     let effective_theme = if theme == "system" {
@@ -202,7 +203,7 @@ pub async fn set_window_theme(app: tauri::AppHandle, theme: String) -> Result<()
     // Set the window theme (this updates decorations on Linux/GNOME)
     window
         .set_theme(Some(window_theme))
-        .map_err(|e| format!("Failed to set window theme: {}", e))?;
+        .map_err(|e| SagaError::Internal(format!("Failed to set window theme: {}", e)))?;
 
     Ok(())
 }

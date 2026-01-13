@@ -5,7 +5,7 @@
     import { defaultKeymap, history, historyKeymap, undo, redo } from '@codemirror/commands';
     import { search, searchKeymap, openSearchPanel, closeSearchPanel, searchPanelOpen } from '@codemirror/search';
     import { foldGutter, foldKeymap } from '@codemirror/language';
-    import { editor } from '$lib/stores/editor';
+    import { editor } from '$lib/stores/editor.svelte';
     import { teiDsl, teiDslHighlighting, teiDslFolding } from '$lib/parser/highlighter';
     import { teiLinter } from '$lib/parser/linter';
     import { lintGutter } from "@codemirror/lint";
@@ -18,7 +18,7 @@
 
     onMount(() => {
         const startState = EditorState.create({
-            doc: $editor.content,
+            doc: editor.content,
             extensions: [
                 lineNumbers(),
                 highlightActiveLineGutter(),

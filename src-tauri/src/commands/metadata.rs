@@ -1,12 +1,13 @@
 //! Tauri commands for metadata operations.
 
+use crate::errors::{Result, SagaError};
 use crate::metadata::Metadata;
 
 /// Generate a TEI header from structured metadata
 #[tauri::command]
-pub fn generate_tei_header(metadata_json: String, include_menota_ns: bool) -> Result<String, String> {
+pub fn generate_tei_header(metadata_json: String, include_menota_ns: bool) -> Result<String> {
     let metadata: Metadata = serde_json::from_str(&metadata_json)
-        .map_err(|e| format!("Failed to parse metadata: {}", e))?;
+        .map_err(SagaError::Serde)?;
 
     Ok(metadata.to_tei_header(include_menota_ns))
 }
@@ -19,9 +20,9 @@ pub fn generate_tei_footer() -> String {
 
 /// Validate metadata JSON structure
 #[tauri::command]
-pub fn validate_metadata(metadata_json: String) -> Result<bool, String> {
+pub fn validate_metadata(metadata_json: String) -> Result<bool> {
     let _: Metadata = serde_json::from_str(&metadata_json)
-        .map_err(|e| format!("Invalid metadata: {}", e))?;
+        .map_err(SagaError::Serde)?;
     Ok(true)
 }
 

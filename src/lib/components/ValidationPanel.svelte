@@ -1,171 +1,157 @@
 <script lang="ts">
     import {
         validationStore,
-        validationResult,
-        isValidating,
-        validationError,
-        validationCounts,
-        availableSchemas,
-        selectedSchemaId,
-    } from "$lib/stores/validation";
-    import { listSchemas, validateXml } from "$lib/tauri";
-    import { errorStore } from "$lib/stores/errors";
+    } from "$lib/stores/validation.svelte";
+    import { validateXml } from "$lib/tauri";
+    import { errorStore } from "$lib/stores/errors.svelte";
+
+    // Icons
     import {
         CircleCheck,
-        X as CloseIcon,
         TriangleAlert,
         Loader,
+        X as CloseIcon,
     } from "@lucide/svelte";
-    import { onMount } from "svelte";
 
-    let { xmlContent, onclose }: { xmlContent: string; onclose?: () => void } =
-        $props();
+    let {
+        xmlContent = "",
+        onclose,
+        onselecterror,
+    }: {
+        xmlContent?: string;
+        onclose?: () => void;
+        onselecterror?: (line: number, column: number) => void;
+    } = $props();
 
-    onMount(async () => {
-        try {
-            const schemas = await listSchemas();
-            validationStore.setSchemas(schemas);
-        } catch (e) {
-            errorStore.warning("Validation", "Failed to load schemas", String(e));
-        }
-    });
+    async function handleSchemaChange(e: Event) {
+        const select = e.target as HTMLSelectElement;
+        validationStore.selectSchema(select.value);
+    }
 
     async function runValidation() {
-        if (!xmlContent) {
-            validationStore.setError("No XML content to validate");
-            return;
-        }
+        if (!xmlContent) return;
 
-        const schemaId = $selectedSchemaId;
+        const schemaId = validationStore.selectedSchemaId;
         validationStore.startValidation();
 
         try {
             const result = await validateXml(xmlContent, schemaId);
             validationStore.setResultKeepSchemas(result);
-
-            if (result.valid) {
-                errorStore.info(
-                    "Validation",
-                    `Document is valid against ${result.schemaName}`,
-                );
-            } else {
-                errorStore.warning(
-                    "Validation",
-                    `Found ${result.errorCount} error(s) and ${result.warningCount} warning(s)`,
-                );
-            }
         } catch (e) {
-            validationStore.setError(String(e));
-            errorStore.error("Validation", "Validation failed", String(e));
+            const msg = String(e);
+            validationStore.setError(msg);
+            errorStore.error("Validation", "XML validation failed", msg);
         }
     }
 
-    function handleSchemaChange(event: Event) {
-        const target = event.target as HTMLSelectElement;
-        validationStore.selectSchema(target.value);
-    }
+    // Run validation automatically when content or schema changes if autoPreview is on?
+    // For now, let's keep it manual as it can be slow for large files
 </script>
 
-<div
-    class="bg-base-100 text-base-content font-mono text-sm h-full flex flex-col"
->
-    <div
-        class="flex justify-between items-center p-3 border-b border-base-300"
-    >
+<div class="bg-base-100 text-base-content font-mono text-sm h-full flex flex-col">
+    <div class="flex justify-between items-center p-3 border-b border-base-300">
         <h2 class="flex items-center gap-2 font-bold">
             XML Validation
-            {#if $validationResult?.valid === true}
+            {#if validationStore.lastResult?.valid === true}
                 <CircleCheck class="text-success" size={16} />
-            {:else if $validationResult?.valid === false}
+            {:else if validationStore.lastResult?.valid === false}
                 <CloseIcon class="text-error" size={16} />
             {/if}
         </h2>
         <div class="flex gap-2 items-center">
             <select
                 class="select select-xs select-bordered bg-base-100 text-base-content"
-                value={$selectedSchemaId}
+                value={validationStore.selectedSchemaId}
                 onchange={handleSchemaChange}
-                disabled={$isValidating}
+                disabled={validationStore.isValidating}
             >
-                {#each $availableSchemas as schema (schema.id)}
+                {#each validationStore.availableSchemas as schema (schema.id)}
                     <option value={schema.id}>{schema.name}</option>
                 {/each}
-                {#if $availableSchemas.length === 0}
+                {#if validationStore.availableSchemas.length === 0}
                     <option value="tei-p5">TEI P5</option>
                 {/if}
             </select>
             <button
                 class="btn btn-primary btn-sm"
                 onclick={runValidation}
-                disabled={$isValidating || !xmlContent}
+                disabled={validationStore.isValidating || !xmlContent}
             >
-                {#if $isValidating}
+                {#if validationStore.isValidating}
                     <Loader class="animate-spin" size={14} />
                 {:else}
                     Validate
                 {/if}
             </button>
-            <button class="btn btn-ghost btn-sm btn-circle" onclick={onclose} aria-label="Close">
+            <button
+                class="btn btn-ghost btn-sm btn-circle"
+                onclick={onclose}
+                aria-label="Close"
+            >
                 <CloseIcon size={16} />
             </button>
         </div>
     </div>
 
     <div class="overflow-y-auto flex-1 p-2">
-        {#if $isValidating}
+        {#if validationStore.isValidating}
             <div class="text-center py-8 flex items-center justify-center gap-2">
                 <Loader class="animate-spin" size={20} />
                 <span>Validating...</span>
             </div>
-        {:else if $validationError}
+        {:else if validationStore.error}
             <div class="p-4 bg-error/20 rounded text-error">
-                {$validationError}
+                {validationStore.error}
             </div>
-        {:else if $validationResult}
-            {#if $validationResult.valid}
+        {:else if validationStore.lastResult}
+            {#if validationStore.lastResult.valid}
                 <div class="p-4 flex items-center gap-2 text-success">
                     <CircleCheck size={20} />
                     <span
-                        >Document is valid against {$validationResult.schemaName}</span
+                        >Document is valid against {validationStore.lastResult.schemaName}</span
                     >
                 </div>
             {:else}
                 <div class="mb-2 flex gap-4 text-xs">
                     <span class="flex items-center gap-1 text-error">
                         <CloseIcon size={14} />
-                        {$validationCounts.errors} error(s)
+                        {validationStore.validationCounts.errors} error(s)
                     </span>
-                    {#if $validationCounts.warnings > 0}
+                    {#if validationStore.validationCounts.warnings > 0}
                         <span class="flex items-center gap-1 text-warning">
                             <TriangleAlert size={14} />
-                            {$validationCounts.warnings} warning(s)
+                            {validationStore.validationCounts.warnings} warning(s)
                         </span>
                     {/if}
                 </div>
 
-                {#each $validationResult.errors as error, i}
-                    <div
-                        class="grid grid-cols-[1.5rem_auto_1fr] gap-2 p-1.5 rounded hover:bg-base-content/10 items-start"
+                {#each validationStore.lastResult.errors as error, i}
+                    <button
+                        class="w-full text-left mb-2 p-2 rounded border border-base-300 hover:bg-base-200 transition-colors group"
+                        onclick={() =>
+                            onselecterror?.(error.line || 1, error.column || 1)}
                     >
-                        <span
-                            class="text-center"
-                            class:text-error={!error.isWarning}
-                            class:text-warning={error.isWarning}
-                        >
-                            {error.isWarning ? "⚠" : "✕"}
-                        </span>
-                        {#if error.line}
-                            <span class="opacity-50 text-xs">Line {error.line}</span>
-                        {:else}
-                            <span></span>
-                        {/if}
-                        <span class="wrap-break-word">{error.message}</span>
-                    </div>
+                        <div class="flex justify-between items-start mb-1">
+                            <span
+                                class="badge badge-sm {error.isWarning
+                                    ? 'badge-warning'
+                                    : 'badge-error'}"
+                            >
+                                {error.isWarning ? "Warning" : "Error"}
+                            </span>
+                            <span class="text-[10px] opacity-50"
+                                >Line {error.line}, Col {error.column}</span
+                            >
+                        </div>
+                        <div class="text-xs break-words">
+                            {error.message}
+                        </div>
+                    </button>
                 {/each}
             {/if}
         {:else}
-            <div class="text-center py-8 opacity-50">
-                Select a schema and click "Validate" to check your XML
+            <div class="text-center py-12 opacity-50 italic">
+                No validation results yet.<br />Click Validate to check the document.
             </div>
         {/if}
     </div>

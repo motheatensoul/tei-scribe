@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { errorStore, errorCounts } from '$lib/stores/errors';
+    import { errorStore } from '$lib/stores/errors.svelte';
     import { X as CloseButton } from "@lucide/svelte";
 
     let { onclose }: { onclose?: () => void } = $props();
@@ -26,11 +26,11 @@
     <div class="flex justify-between items-center p-3 border-b border-base-300">
         <h2 class="flex items-center gap-2 font-bold">
             Logs
-            {#if $errorCounts.error > 0}
-                <span class="badge badge-error badge-sm">{$errorCounts.error}</span>
+            {#if errorStore.counts.error > 0}
+                <span class="badge badge-error badge-sm">{errorStore.counts.error}</span>
             {/if}
-            {#if $errorCounts.warning > 0}
-                <span class="badge badge-warning badge-sm">{$errorCounts.warning}</span>
+            {#if errorStore.counts.warning > 0}
+                <span class="badge badge-warning badge-sm">{errorStore.counts.warning}</span>
             {/if}
         </h2>
         <div class="flex gap-2 items-center">
@@ -42,7 +42,7 @@
     </div>
 
     <div class="overflow-y-auto flex-1 p-2">
-        {#each $errorStore.slice().reverse() as error (error.id)}
+        {#each errorStore.all.slice().reverse() as error (error.id)}
             <div class="grid grid-cols-[1.5rem_4rem_8rem_1fr] gap-2 p-1.5 rounded hover:bg-base-200 items-start">
                 <span class="text-center" class:text-error={error.level === 'error'} class:text-warning={error.level === 'warning'} class:text-info={error.level === 'info'}>
                     {getLevelIcon(error.level)}

@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { Template } from "./stores/template";
-import type { Entity, EntityMap } from "./stores/entities";
+import type { Template } from "./types/template";
+import type { Entity, EntityMap } from "./types/entities";
+
 
 export interface Settings {
   fontSize: number;

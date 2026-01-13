@@ -1,11 +1,10 @@
 <script lang="ts">
     import { onMount, onDestroy } from "svelte";
-    import { EditorView } from "@codemirror/view";
+    import { EditorView } from "codemirror";
     import { EditorState } from "@codemirror/state";
     import { xml } from "@codemirror/lang-xml";
-    import { basicSetup } from "codemirror";
-    import { lintGutter, linter, type Diagnostic } from "@codemirror/lint";
-    import { validationStore } from "$lib/stores/validation";
+    import { linter, type Diagnostic } from "@codemirror/lint";
+    import { validationStore } from "$lib/stores/validation.svelte";
     import { daisyExtensions } from "$lib/editor/theme";
 
     let {
@@ -21,18 +20,15 @@
         ) => void;
     } = $props();
 
-    // Svelte 5 derived state
-    let validationState = $derived($validationStore);
-
     let container: HTMLDivElement;
     let view: EditorView;
 
     // Define a linter source that reads from the validation store
     const xmlLinter = linter((view) => {
-        if (!validationState.lastResult || validationState.lastResult.valid) return [];
+        if (!validationStore.lastResult || validationStore.lastResult.valid) return [];
         
         const diagnostics: Diagnostic[] = [];
-        for (const err of validationState.lastResult.errors) {
+        for (const err of validationStore.lastResult.errors) {
             // Error lines are 1-based, CodeMirror lines are 1-based for .line() access
             // But we need to be careful about bounds
             if (err.line && err.line <= view.state.doc.lines) {
@@ -52,15 +48,16 @@
         const startState = EditorState.create({
             doc: content,
             extensions: [
-                basicSetup,
-                xml(),
-                // Read-only mode
-                EditorState.readOnly.of(true),
-                // Linter integration
-                lintGutter(),
-                xmlLinter,
-                // DaisyUI Theme
                 daisyExtensions,
+                xml(),
+                xmlLinter,
+                EditorView.editable.of(false),
+                EditorState.readOnly.of(true),
+                EditorView.lineWrapping,
+                EditorView.theme({
+                    "&": { height: "100%" },
+                    ".cm-scroller": { overflow: "auto" },
+                }),
             ],
         });
 
@@ -71,10 +68,10 @@
     });
 
     onDestroy(() => {
-        view?.destroy();
+        if (view) view.destroy();
     });
 
-    // Reactive update for content
+    // Update editor content when prop changes
     $effect(() => {
         if (view && content !== view.state.doc.toString()) {
             view.dispatch({
@@ -86,10 +83,10 @@
             });
         }
     });
-    
+
     // Trigger linting update when validation changes
     $effect(() => {
-        if (view && validationState.lastResult) {
+        if (view && validationStore.lastResult) {
             // Dispatch a dummy transaction to trigger linter re-run
             view.dispatch({
                 // Just dispatch empty to signal update
@@ -98,7 +95,9 @@
     });
 </script>
 
-<div class="h-full w-full" bind:this={container}></div>
+<div class="h-full w-full overflow-hidden flex flex-col bg-base-100">
+    <div bind:this={container} class="flex-1 overflow-hidden border border-base-300 rounded"></div>
+</div>
 
 <style>
     :global(.cm-editor) {

@@ -1,7 +1,8 @@
 <script lang="ts">
-    import { templateStore, type Template } from "$lib/stores/template";
+    import { templateStore } from "$lib/stores/template.svelte";
+    import type { Template } from "$lib/types/template";
     import { listTemplates, saveTemplate, deleteTemplate } from "$lib/tauri";
-    import { errorStore } from "$lib/stores/errors";
+    import { errorStore } from "$lib/stores/errors.svelte";
 
     //Icons
     import { BookCopy, PencilRuler, X as CloseButton } from "@lucide/svelte";
@@ -141,9 +142,9 @@
                 return false;
             }
 
-            const existingIds = $templateStore.templates
-                .filter((t) => !isBuiltin(t.id))
-                .map((t) => t.id);
+            const existingIds = templateStore.templates
+                .filter((t: Template) => !isBuiltin(t.id))
+                .map((t: Template) => t.id);
             if (existingIds.includes(editingTemplate.id)) {
                 validationError =
                     "A template with this ID already exists. Please choose a different name.";
@@ -211,7 +212,7 @@
             templateStore.setTemplates(templates);
 
             // If the deleted template was active, switch to first available
-            if ($templateStore.active?.id === template.id) {
+            if (templateStore.active?.id === template.id) {
                 if (templates.length > 0) {
                     templateStore.setActive(templates[0]);
                 }
@@ -275,7 +276,7 @@
                 {#if viewMode === "list"}
                     <!-- Template List -->
                     <div class="space-y-3">
-                        {#each $templateStore.templates as template}
+                        {#each templateStore.templates as template}
                             <div
                                 class="flex items-center justify-between p-4 bg-base-200 rounded-lg gap-4"
                             >
@@ -290,7 +291,7 @@
                                                 >Built-in</span
                                             >
                                         {/if}
-                                        {#if $templateStore.active?.id === template.id}
+                                        {#if templateStore.active?.id === template.id}
                                             <span
                                                 class="badge badge-sm badge-primary"
                                                 >Active</span

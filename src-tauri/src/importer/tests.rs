@@ -43,6 +43,27 @@ fn test_import_supplied() {
 }
 
 #[test]
+fn test_import_supplied_with_ex() {
+    // This is the edge case that caused empty <> markers:
+    // <supplied> containing only <ex> elements was producing empty supplied markers
+    // because <ex> was skipped (we use facs level). Now we use extract_text which
+    // extracts all text content including from <ex>.
+    let xml = "<body>f<supplied><ex>ra</ex></supplied> text</body>";
+    let result = parse(xml).unwrap();
+    // Should produce <ra> not <>
+    assert_eq!(result.dsl, "f<ra> text");
+}
+
+#[test]
+fn test_import_supplied_empty_skipped() {
+    // Empty <supplied> elements should be skipped entirely, not produce <>
+    let xml = "<body>text <supplied></supplied> more</body>";
+    let result = parse(xml).unwrap();
+    // Should not contain empty <> markers
+    assert!(!result.dsl.contains("<>"), "Empty supplied should be skipped, got: {}", result.dsl);
+}
+
+#[test]
 fn test_import_del_add() {
     let xml = "<body><del>deleted</del><add>added</add></body>";
     let result = parse(xml).unwrap();
@@ -427,6 +448,90 @@ fn test_load_menota_test_file() {
     // (The test file should have <pb> elements)
     println!("DSL length: {} chars", import_result.dsl.len());
     println!("First 500 chars of DSL:\n{}", &import_result.dsl.chars().take(500).collect::<String>());
+}
+
+#[test]
+fn test_imported_dsl_compiles_to_valid_xml() {
+    use crate::parser::Compiler;
+    use crate::metadata::Metadata;
+    
+    // Load the real MENOTA test file
+    let test_file_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .join("static/tests/HolmPerg-34-4to-MLL.xml");
+    
+    if !test_file_path.exists() {
+        println!("Test file not found at {:?}, skipping", test_file_path);
+        return;
+    }
+    
+    let xml_content = std::fs::read_to_string(&test_file_path)
+        .expect("Should read test file");
+    
+    let import_result = parse(&xml_content).expect("Import should succeed");
+    let dsl = &import_result.dsl;
+    
+    println!("DSL length: {} chars", dsl.len());
+    println!("First 200 chars of DSL:\n{}", &dsl.chars().take(200).collect::<String>());
+    
+    // Compile the DSL body
+    let mut compiler = Compiler::new();
+    let body = compiler.compile(dsl).expect("Compilation should succeed");
+    
+    println!("\nCompiled body length: {} chars", body.len());
+    println!("Body starts with '<': {}", body.trim_start().starts_with('<'));
+    
+    // Now test full XML generation with metadata header
+    if let Some(ref metadata) = import_result.metadata {
+        println!("\n=== Testing with metadata header ===");
+        
+        // Serialize metadata to JSON (as frontend does)
+        let metadata_json = serde_json::to_string(metadata).expect("Serialize metadata");
+        println!("Metadata JSON length: {} chars", metadata_json.len());
+        println!("First 200 chars of metadata JSON:\n{}", &metadata_json.chars().take(200).collect::<String>());
+        
+        // Deserialize back (as generate_tei_header does)
+        let meta: Metadata = serde_json::from_str(&metadata_json).expect("Deserialize metadata");
+        
+        // Generate TEI header
+        let header = meta.to_tei_header(true);
+        println!("\nGenerated header length: {} chars", header.len());
+        println!("First 300 chars of header:\n{}", &header.chars().take(300).collect::<String>());
+        println!("Header starts with '<': {}", header.trim_start().starts_with('<'));
+        
+        // Check first bytes of header
+        let header_first_20_bytes: Vec<u8> = header.bytes().take(20).collect();
+        println!("Header first 20 bytes: {:?}", header_first_20_bytes);
+        
+        // Combine as compile_dsl command does
+        let footer = "</body></text></TEI>";
+        let mut parts = Vec::new();
+        if !header.is_empty() {
+            parts.push(header.as_str());
+        }
+        if !body.is_empty() {
+            parts.push(body.as_str());
+        }
+        if !footer.is_empty() {
+            parts.push(footer);
+        }
+        let full_xml = parts.join("\n");
+        
+        println!("\n=== Full XML output ===");
+        println!("Full XML length: {} chars", full_xml.len());
+        println!("First 500 chars:\n{}", &full_xml.chars().take(500).collect::<String>());
+        println!("Full XML starts with '<': {}", full_xml.trim_start().starts_with('<'));
+        
+        // Check first bytes
+        let full_first_20_bytes: Vec<u8> = full_xml.bytes().take(20).collect();
+        println!("Full XML first 20 bytes: {:?}", full_first_20_bytes);
+        
+        // Validate
+        assert!(full_xml.trim_start().starts_with('<'), 
+            "Full XML should start with '<', got bytes: {:?}", 
+            full_first_20_bytes);
+    }
 }
 
 #[test]

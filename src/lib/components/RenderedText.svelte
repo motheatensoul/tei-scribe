@@ -1,8 +1,10 @@
 <script lang="ts">
-    import { entityStore, type EntityMap } from '$lib/stores/entities';
-    import { getInflections, lemmaMappings, knownInflectionForms } from '$lib/stores/dictionary';
-    import { annotationsForWord, type AnnotationType } from '$lib/stores/annotations';
-    import { validationStore } from '$lib/stores/validation';
+    import { entityStore } from '$lib/stores/entities.svelte';
+    import type { EntityMap } from '$lib/types/entities';
+    import { resolveEntitiesToGlyphs } from '$lib/utils/entities';
+    import { inflectionStore } from '$lib/stores/dictionary.svelte';
+    import { annotationStore, type AnnotationType } from '$lib/stores/annotations.svelte';
+    import { validationStore } from '$lib/stores/validation.svelte';
 
     let {
         content = '',
@@ -16,30 +18,29 @@
         type: 'word' | 'punctuation' | 'linebreak' | 'pagebreak' | 'space' | 'text';
         displayText: string;  // What to show (facsimile with resolved entities)
         diplomatic?: string;  // For lemmatization lookup
-        wordIndex?: number;   // The word's index in the document (for per-instance lemmatization)
-        lineNumber?: string;
-        pageNumber?: string;
-        hasError?: boolean;
-        errorTooltip?: string;
-    }
-
-    interface Page {
-        pageNumber: string;        // e.g., "1r", "1v", or "intro" for content before first pb
-        startTokenIndex: number;   // Absolute token index for quick lookups
-        tokens: TextToken[];
-        wordCount: number;
+        wordIndex?: number;   // Global word index (0-based)
+        lineNum?: string;     // For line breaks
+        pageNum?: string;     // For page breaks
+        isSupplied?: boolean; // From <supplied>
+        isDeletion?: boolean; // From <del>
+        isAddition?: boolean; // From <add>
+        isAbbr?: boolean;     // From <abbr>
+        expansion?: string;   // From <expan>
     }
 
     interface ParsedDocument {
-        pages: Page[];
-        totalTokens: number;
-        totalWords: number;
+        tokens: TextToken[];
+        pages: { 
+            pageNum: string; 
+            startIndex: number; 
+            endIndex: number; 
+        }[];
     }
 
     // Access entity store reactively at top level
-    let entities = $derived($entityStore.entities);
+    let entities = $derived(entityStore.entities);
     // Access validation errors
-    let validationState = $derived($validationStore);
+    let validationState = $derived(validationStore);
 
     // Async parsing state to avoid blocking UI
     let document = $state<ParsedDocument | null>(null);
@@ -49,679 +50,368 @@
 
     // Pre-compute confirmed word set for O(1) lookups during render
     let confirmedWordSet = $derived(
-        new Set(Object.keys($lemmaMappings.mappings).map(Number))
+        new Set(Object.keys(annotationStore.lemmaMappings).map(Number))
     );
 
-    // Visible pages: current + 1 adjacent on each side for scroll buffer
-    let visiblePages = $derived(() => {
-        if (!document || document.pages.length === 0) return [];
-        const start = Math.max(0, currentPageIndex - 1);
-        const end = Math.min(document.pages.length, currentPageIndex + 2);
-        return document.pages.slice(start, end);
+    // Get set of annotation types for a word for badge rendering
+    function getWordAnnotationTypes(wordIndex: number): Set<AnnotationType> {
+        const anns = annotationStore.getForWord(wordIndex);
+        return new Set(anns.map((a: { type: AnnotationType }) => a.type));
+    }
+
+    // Re-parse when content or entities change
+    $effect(() => {
+        if (content !== lastContent) {
+            lastContent = content;
+            parseXmlContent(content);
+        }
     });
 
-    // Helper to yield to browser for smooth animations
-    const yieldToMain = () => new Promise(resolve => setTimeout(resolve, 0));
-
-    // React to content changes and parse asynchronously
-    $effect(() => {
-        const currentContent = content;
-        const currentEntities = entities;
-
-        if (currentContent === lastContent) return;
-        lastContent = currentContent;
-
-        if (!currentContent.trim()) {
+    async function parseXmlContent(xml: string) {
+        if (!xml.trim()) {
             document = null;
-            currentPageIndex = 0;
             return;
         }
 
         isRendering = true;
-
-        // Use async IIFE for chunked parsing
-        (async () => {
-            // Yield first to let loading state render
-            await yieldToMain();
-
-            const result = await parseXmlAsync(currentContent, currentEntities);
-            document = result;
-            // Reset to first page when content changes
-            currentPageIndex = 0;
-            isRendering = false;
-        })();
-    });
-
-    // Async version of parseXml that yields to main thread periodically
-    // Returns ParsedDocument with tokens grouped by page
-    async function parseXmlAsync(xml: string, entityDefs: EntityMap): Promise<ParsedDocument> {
-        const emptyDoc: ParsedDocument = { pages: [], totalTokens: 0, totalWords: 0 };
-        if (!xml.trim()) return emptyDoc;
-
         try {
-            // Strip XML declaration if present (breaks when wrapped)
-            let cleanXml = xml.replace(/<\?xml[^?]*\?>\s*/gi, '');
-
-            // Replace entity references with placeholders to avoid XML parsing errors
-            const entityPattern = /&([a-zA-Z][a-zA-Z0-9]*);/g;
-            const entityMap = new Map<string, string>();
-            let entityCounter = 0;
-
-            const sanitized = cleanXml.replace(entityPattern, (match, name) => {
-                const placeholder = `__ENTITY_${entityCounter}__`;
-                entityMap.set(placeholder, name);
-                entityCounter++;
-                return placeholder;
-            });
-
-            // Wrap in a root element with namespace declarations
-            const wrapped = `<root xmlns:me="http://www.menota.org/ns/1.0">${sanitized}</root>`;
             const parser = new DOMParser();
-            const doc = parser.parseFromString(wrapped, 'text/xml');
-
-            const parseError = doc.querySelector('parsererror');
-            if (parseError) {
-                console.warn('XML parse error:', parseError.textContent);
-                return {
-                    pages: [{
-                        pageNumber: 'error',
-                        startTokenIndex: 0,
-                        tokens: [{ type: 'text', displayText: xml }],
-                        wordCount: 0
-                    }],
-                    totalTokens: 1,
-                    totalWords: 0
-                };
+            const xmlDoc = parser.parseFromString(xml, 'text/xml');
+            
+            if (xmlDoc.querySelector('parsererror')) {
+                // Return null or partial if parse error
+                isRendering = false;
+                return;
             }
 
-            const allTokens: TextToken[] = [];
-            const root = doc.documentElement;
-
-            // Find the body content - try multiple approaches for namespaced XML
-            let body: Element | null = null;
-
-            // Try querySelector first
-            body = root.querySelector('body');
-
-            // If not found, try getElementsByTagName (works better with namespaces)
-            if (!body) {
-                const bodies = root.getElementsByTagName('body');
-                if (bodies.length > 0) {
-                    body = bodies[0];
+            const body = xmlDoc.querySelector('body');
+            if (body) {
+                document = await extractTokensAsync(body);
+                // Reset to first page if we're past the end
+                if (currentPageIndex >= (document?.pages.length || 0)) {
+                    currentPageIndex = 0;
                 }
             }
-
-            // Fall back to text element
-            if (!body) {
-                body = root.querySelector('text') || root.getElementsByTagName('text')[0];
-            }
-
-            // Final fallback to root
-            const target = body || root;
-
-            // Use a counter object to track word index and yield progress
-            const wordCounter = { index: 0 };
-            const yieldCounter = { count: 0 };
-            const YIELD_EVERY = 500; // Yield every 500 tokens for smooth animation
-
-            await extractTokensAsync(target, allTokens, entityMap, entityDefs, wordCounter, yieldCounter, YIELD_EVERY);
-
-            // If no tokens extracted, show a message
-            if (allTokens.length === 0) {
-                return {
-                    pages: [{
-                        pageNumber: 'empty',
-                        startTokenIndex: 0,
-                        tokens: [{ type: 'text', displayText: '(No content in body)' }],
-                        wordCount: 0
-                    }],
-                    totalTokens: 1,
-                    totalWords: 0
-                };
-            }
-
-            // Group tokens by page - split on pagebreak tokens
-            const pages: Page[] = [];
-            let currentPage: Page = {
-                pageNumber: 'intro',
-                startTokenIndex: 0,
-                tokens: [],
-                wordCount: 0
-            };
-
-            let absoluteTokenIndex = 0;
-            for (const token of allTokens) {
-                if (token.type === 'pagebreak') {
-                    // If current page has content, save it
-                    if (currentPage.tokens.length > 0) {
-                        pages.push(currentPage);
-                    }
-                    // Start a new page
-                    currentPage = {
-                        pageNumber: token.pageNumber || `page-${pages.length + 1}`,
-                        startTokenIndex: absoluteTokenIndex,
-                        tokens: [token], // Include the pagebreak token at start of its page
-                        wordCount: 0
-                    };
-                } else {
-                    currentPage.tokens.push(token);
-                    if (token.type === 'word') {
-                        currentPage.wordCount++;
-                    }
-                }
-                absoluteTokenIndex++;
-            }
-
-            // Don't forget the last page
-            if (currentPage.tokens.length > 0) {
-                pages.push(currentPage);
-            }
-
-            // Calculate totals
-            const totalWords = pages.reduce((sum, p) => sum + p.wordCount, 0);
-
-            return {
-                pages,
-                totalTokens: allTokens.length,
-                totalWords
-            };
         } catch (e) {
-            console.error('Parse error:', e);
-            return {
-                pages: [{
-                    pageNumber: 'error',
-                    startTokenIndex: 0,
-                    tokens: [{ type: 'text', displayText: `Parse error: ${e}` }],
-                    wordCount: 0
-                }],
-                totalTokens: 1,
-                totalWords: 0
-            };
+            console.error('Render parsing error:', e);
+        } finally {
+            isRendering = false;
         }
     }
+
+    // Helper to yield periodically to keep UI responsive
+    const yieldToMain = () => new Promise(resolve => setTimeout(resolve, 0));
 
     // Resolve entity placeholders to actual glyphs
-    function resolveEntitiesToGlyphs(text: string, entityMap: Map<string, string>, entityDefs: EntityMap): string {
-        let result = text;
-        for (const [placeholder, entityName] of entityMap) {
-            // Look up the entity in our entity definitions
-            const entity = entityDefs[entityName];
-            const glyph = entity?.char || `[${entityName}]`;
-            result = result.replaceAll(placeholder, glyph);
-        }
-        return result;
-    }
+    // Restored via import from utils/entities.ts
 
     // Async version of extractTokens that yields periodically
     async function extractTokensAsync(
-        node: Node,
-        result: TextToken[],
-        entityMap: Map<string, string>,
-        entityDefs: EntityMap,
-        wordCounter: { index: number },
-        yieldCounter: { count: number },
-        yieldEvery: number
-    ): Promise<void> {
-        for (const child of node.childNodes) {
-            // Yield to main thread periodically
-            yieldCounter.count++;
-            if (yieldCounter.count % yieldEvery === 0) {
-                await yieldToMain();
+        body: Element,
+    ): Promise<ParsedDocument> {
+        const tokens: TextToken[] = [];
+        const pages: ParsedDocument['pages'] = [];
+        let wordIndex = 0;
+        let currentLine: string | undefined;
+        let currentPage: string | undefined;
+        let currentPageStartIndex = 0;
+
+        // Recursively process nodes
+        const processNode = async (node: Node) => {
+            if (node.nodeType === 3) { // Text node
+                const text = node.textContent || '';
+                if (text.trim() || text.includes(' ')) {
+                    const parts = text.split(/(\s+)/);
+                    for (const part of parts) {
+                        if (part.trim()) {
+                            // It's text, but in TEI words are in <w>
+                            // This text is likely whitespace or punctuation between elements
+                            // if not inside <w>
+                            if (node.parentElement?.localName !== 'w') {
+                                tokens.push({
+                                    type: 'text',
+                                    displayText: resolveEntitiesToGlyphs(part, new Map(), entities),
+                                });
+                            }
+                        } else if (part.includes(' ')) {
+                            tokens.push({ type: 'space', displayText: ' ' });
+                        }
+                    }
+                }
+                return;
             }
 
-            if (child.nodeType === Node.TEXT_NODE) {
-                const text = child.textContent || '';
-                if (text.trim()) {
-                    result.push({
-                        type: 'text',
-                        displayText: resolveEntitiesToGlyphs(text, entityMap, entityDefs),
+            if (node.nodeType !== 1) return; // Only process elements
+
+            const el = node as Element;
+            // Use localName to strip namespace prefix (e.g., 'me:dipl' -> 'dipl')
+            const tagName = el.localName;
+
+            if (tagName === 'pb') {
+                const n = el.getAttribute('n') || '?';
+                
+                // Finalize previous page
+                if (pages.length > 0 || tokens.length > currentPageStartIndex) {
+                    pages.push({
+                        pageNum: currentPage || '1',
+                        startIndex: currentPageStartIndex,
+                        endIndex: tokens.length
                     });
                 }
-            } else if (child.nodeType === Node.ELEMENT_NODE) {
-                const el = child as Element;
-                const tagName = el.localName;
+                
+                currentPage = n;
+                currentPageStartIndex = tokens.length;
+                
+                tokens.push({
+                    type: 'pagebreak',
+                    displayText: n,
+                    pageNum: n
+                });
+            } else if (tagName === 'lb') {
+                const n = el.getAttribute('n');
+                currentLine = n || undefined;
+                tokens.push({
+                    type: 'linebreak',
+                    displayText: n || '',
+                    lineNum: n || undefined
+                });
+            } else if (tagName === 'w') {
+                // Word element - contains facsimile (text/supplied/abbr) 
+                // and diplomatic (me:dipl)
+                
+                // Find dipl element by localName to handle namespace prefix
+                const diplEl = Array.from(el.children).find(c => c.localName === 'dipl');
+                const diplomatic = diplEl?.textContent || '';
+                
+                // Build facsimile representation from children (excluding dipl/norm)
+                let facsimile = '';
+                let isSupplied = false;
+                let isDeletion = false;
+                let isAddition = false;
+                let isAbbr = false;
+                let expansion = '';
 
-                switch (tagName) {
-                    case 'w': {
-                        const facsEl = el.querySelector('me\\:facs, facs');
-                        const diplEl = el.querySelector('me\\:dipl, dipl');
-                        const facsRaw = facsEl?.textContent || el.textContent || '';
-                        const diplRaw = diplEl?.textContent || facsRaw;
-                        const displayText = resolveEntitiesToGlyphs(facsRaw, entityMap, entityDefs).trim();
-                        const diplomatic = resolveEntitiesToGlyphs(diplRaw, entityMap, entityDefs).trim();
-                        const wordIndex = wordCounter.index;
-                        wordCounter.index++;
+                for (const child of Array.from(el.childNodes)) {
+                    if (child.nodeType === 3) {
+                        facsimile += child.textContent;
+                    } else if (child.nodeType === 1) {
+                        const childEl = child as Element;
+                        // Use localName to strip namespace prefix
+                        const childTag = childEl.localName;
+                        
+                        if (childTag === 'supplied') {
+                            facsimile += childEl.textContent;
+                            isSupplied = true;
+                        } else if (childTag === 'del') {
+                            facsimile += childEl.textContent;
+                            isDeletion = true;
+                        } else if (childTag === 'add') {
+                            facsimile += childEl.textContent;
+                            isAddition = true;
+                        } else if (childTag === 'choice') {
+                            const abbr = childEl.querySelector('abbr');
+                            const expan = childEl.querySelector('expan');
+                            if (abbr) facsimile += abbr.textContent;
+                            if (expan) {
+                                isAbbr = true;
+                                expansion = expan.textContent || '';
+                            }
+                        }
+                    }
+                }
 
-                        if (displayText) {
-                            result.push({ type: 'word', displayText, diplomatic, wordIndex });
-                            result.push({ type: 'space', displayText: ' ' });
-                        }
-                        break;
-                    }
-                    case 'pc': {
-                        const facsEl = el.querySelector('me\\:facs, facs');
-                        const facsRaw = facsEl?.textContent || el.textContent || '';
-                        const displayText = resolveEntitiesToGlyphs(facsRaw, entityMap, entityDefs).trim();
-                        if (displayText) {
-                            result.push({ type: 'punctuation', displayText });
-                            result.push({ type: 'space', displayText: ' ' });
-                        }
-                        break;
-                    }
-                    case 'lb': {
-                        const n = el.getAttribute('n');
-                        result.push({ type: 'linebreak', displayText: '', lineNumber: n || undefined });
-                        break;
-                    }
-                    case 'pb': {
-                        const n = el.getAttribute('n');
-                        result.push({ type: 'pagebreak', displayText: '', pageNumber: n || undefined });
-                        break;
-                    }
-                    case 'gap': {
-                        const quantity = el.getAttribute('quantity') || '?';
-                        result.push({ type: 'text', displayText: `[…${quantity}]` });
-                        break;
-                    }
-                    case 'supplied': {
-                        const text = resolveEntitiesToGlyphs(el.textContent || '', entityMap, entityDefs);
-                        result.push({ type: 'text', displayText: `⟨${text}⟩` });
-                        break;
-                    }
-                    case 'unclear': {
-                        const text = resolveEntitiesToGlyphs(el.textContent || '', entityMap, entityDefs);
-                        result.push({ type: 'text', displayText: `${text}?` });
-                        break;
-                    }
-                    case 'del': {
-                        const text = resolveEntitiesToGlyphs(el.textContent || '', entityMap, entityDefs);
-                        result.push({ type: 'text', displayText: `⟦${text}⟧` });
-                        break;
-                    }
-                    case 'add': {
-                        const text = resolveEntitiesToGlyphs(el.textContent || '', entityMap, entityDefs);
-                        result.push({ type: 'text', displayText: `\\${text}/` });
-                        break;
-                    }
-                    case 'choice': {
-                        const abbr = el.querySelector('abbr')?.textContent || '';
-                        const text = resolveEntitiesToGlyphs(abbr, entityMap, entityDefs);
-                        if (text) {
-                            result.push({ type: 'text', displayText: text });
-                            result.push({ type: 'space', displayText: ' ' });
-                        }
-                        break;
-                    }
-                    default:
-                        // Recurse into other elements
-                        await extractTokensAsync(el, result, entityMap, entityDefs, wordCounter, yieldCounter, yieldEvery);
+                tokens.push({
+                    type: 'word',
+                    wordIndex: wordIndex++,
+                    displayText: resolveEntitiesToGlyphs(facsimile, new Map(), entities),
+                    diplomatic: diplomatic || facsimile,
+                    isSupplied,
+                    isDeletion,
+                    isAddition,
+                    isAbbr,
+                    expansion
+                });
+            } else if (tagName === 'pc') {
+                tokens.push({
+                    type: 'punctuation',
+                    displayText: resolveEntitiesToGlyphs(el.textContent || '', new Map(), entities)
+                });
+            } else if (tagName !== 'dipl' && tagName !== 'norm' && tagName !== 'facs') {
+                // Recursively process other elements (like <body>, <p>, etc.)
+                // Skip Menota level containers as we handle them inside <w>
+                // localName already strips the 'me:' prefix so this works for both
+                for (const child of Array.from(el.childNodes)) {
+                    await processNode(child);
                 }
             }
+        };
+
+        // Process all nodes and yield occasionally
+        const allChildNodes = Array.from(body.childNodes);
+        for (let i = 0; i < allChildNodes.length; i++) {
+            await processNode(allChildNodes[i]);
+            if (i % 50 === 0) await yieldToMain();
         }
-    }
 
-    function handleWordClick(token: TextToken, event: MouseEvent) {
-        const target = event.currentTarget as HTMLElement;
-        // Pass both facsimile (displayText) and diplomatic forms for lemmatization
-        const facsimile = token.displayText;
-        const diplomatic = token.diplomatic || token.displayText;
-        // Shift-click extends selection for span annotations
-        const isSpanExtend = event.shiftKey;
-        onwordclick?.(facsimile, diplomatic, token.wordIndex ?? -1, target, isSpanExtend);
-    }
+        // Finalize last page
+        if (tokens.length > currentPageStartIndex) {
+            pages.push({
+                pageNum: currentPage || (pages.length === 0 ? '1' : '?'),
+                startIndex: currentPageStartIndex,
+                endIndex: tokens.length
+            });
+        }
 
-    // Pre-compute known inflection forms for O(1) hasKnownLemma check
-    let knownForms = $derived($knownInflectionForms);
-
-    function hasKnownLemma(word: string): boolean {
-        // Use precomputed set for O(1) lookup (keys are already lowercase)
-        return knownForms.has(word.toLowerCase());
-    }
-
-    // Check if this specific word instance is confirmed in the session
-    // Uses pre-computed confirmedWordSet for O(1) lookup
-    function isWordConfirmed(wordIndex: number | undefined): boolean {
-        if (wordIndex === undefined || wordIndex < 0) return false;
-        return confirmedWordSet.has(wordIndex);
-    }
-
-    // Check for different annotation types on a word
-    function getWordAnnotationTypes(wordIndex: number | undefined): Set<AnnotationType> {
-        if (wordIndex === undefined || wordIndex < 0) return new Set();
-        const anns = $annotationsForWord(wordIndex);
-        return new Set(anns.map(a => a.type));
-    }
-
-    // Check if word has specific annotation type
-    function hasAnnotationType(wordIndex: number | undefined, type: AnnotationType): boolean {
-        if (wordIndex === undefined || wordIndex < 0) return false;
-        return getWordAnnotationTypes(wordIndex).has(type);
-    }
-
-    // Navigation functions
-    function goToPage(index: number) {
-        if (!document) return;
-        currentPageIndex = Math.max(0, Math.min(index, document.pages.length - 1));
-    }
-
-    function goToPrevPage() {
-        goToPage(currentPageIndex - 1);
-    }
-
-    function goToNextPage() {
-        goToPage(currentPageIndex + 1);
+        return { tokens, pages };
     }
 
     function formatLemmaTooltip(token: TextToken): string | undefined {
         const word = token.diplomatic || token.displayText;
-        const inflections = $getInflections(word);
-
-        if (inflections.length === 0) {
-            if (token.diplomatic && token.diplomatic !== token.displayText) {
-                return `diplomatic: ${token.diplomatic}`;
-            }
-            return undefined;
-        }
-
-        const parts: string[] = [];
-        for (const inf of inflections) {
-            parts.push(`${inf.lemma} (${inf.analysis})`);
-        }
-
-        let tooltip = parts.join('; ');
-        if (token.diplomatic && token.diplomatic !== token.displayText) {
-            tooltip = `diplomatic: ${token.diplomatic}\n${tooltip}`;
-        }
-        return tooltip;
+        const inflections = inflectionStore.getInflections(word);
+        
+        if (inflections.length === 0) return undefined;
+        
+        return inflections.map(i => `${i.lemma} (${i.analysis})`).join('\n');
     }
+
+    const currentPage = $derived(document?.pages[currentPageIndex]);
+    const pageTokens = $derived(currentPage ? document?.tokens.slice(currentPage.startIndex, currentPage.endIndex) : []);
 </script>
 
-<div class="rendered-text font-serif text-lg leading-loose relative">
-    {#if validationState.lastResult && !validationState.lastResult.valid}
-         <div class="absolute top-0 right-0 p-2 text-xs text-error opacity-50 hover:opacity-100 transition-opacity z-10">
-            {validationState.lastResult.errors.length} schema errors
-         </div>
+<div class="h-full flex flex-col bg-base-100 text-base-content overflow-hidden rounded shadow-inner border border-base-300">
+    <!-- Pagination Header -->
+    {#if document && document.pages.length > 1}
+        <div class="flex justify-between items-center px-4 py-2 bg-base-200 border-b border-base-300 shrink-0">
+            <div class="flex gap-2 items-center">
+                <button 
+                    class="btn btn-xs btn-outline" 
+                    disabled={currentPageIndex === 0}
+                    onclick={() => currentPageIndex--}
+                >
+                    Prev
+                </button>
+                <span class="text-xs font-mono">
+                    Page {currentPage?.pageNum || '?'} ({currentPageIndex + 1} / {document.pages.length})
+                </span>
+                <button 
+                    class="btn btn-xs btn-outline" 
+                    disabled={currentPageIndex === document.pages.length - 1}
+                    onclick={() => currentPageIndex++}
+                >
+                    Next
+                </button>
+            </div>
+            
+            <div class="text-[10px] opacity-50 italic">
+                {document.tokens.filter(t => t.type === 'word').length} words total
+            </div>
+        </div>
     {/if}
 
-    {#if isRendering}
-        <div class="flex flex-col items-center justify-center py-12">
-            <!-- SVG spinner with explicit animation for smooth rendering during async parsing -->
-            <svg viewBox="0 0 50 50" width="48" height="48">
-                <circle
-                    cx="25"
-                    cy="25"
-                    r="20"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="4"
-                    stroke-linecap="round"
-                    stroke-dasharray="90, 150"
-                    stroke-dashoffset="0"
-                    class="text-primary"
-                >
-                    <animateTransform
-                        attributeName="transform"
-                        type="rotate"
-                        from="0 25 25"
-                        to="360 25 25"
-                        dur="1s"
-                        repeatCount="indefinite"
-                    />
-                </circle>
-            </svg>
-            <p class="mt-4 text-base-content/70">Rendering preview...</p>
-        </div>
-    {:else if document && document.pages.length > 0}
-        <!-- Page navigation header -->
-        {#if document.pages.length > 1}
-            <div class="page-nav sticky top-0 bg-base-100/95 backdrop-blur-sm border-b border-base-300 px-4 py-2 flex items-center justify-between gap-2 z-10">
-                <div class="flex items-center gap-1">
-                    <button
-                        type="button"
-                        class="btn btn-ghost btn-xs"
-                        onclick={() => goToPage(0)}
-                        disabled={currentPageIndex === 0}
-                        title="First page"
-                    >
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                            <path fill-rule="evenodd" d="M15.707 15.707a1 1 0 01-1.414 0l-5-5a1 1 0 010-1.414l5-5a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 010 1.414zm-6 0a1 1 0 01-1.414 0l-5-5a1 1 0 010-1.414l5-5a1 1 0 011.414 1.414L5.414 10l4.293 4.293a1 1 0 010 1.414z" clip-rule="evenodd" />
-                        </svg>
-                    </button>
-                    <button
-                        type="button"
-                        class="btn btn-ghost btn-xs"
-                        onclick={goToPrevPage}
-                        disabled={currentPageIndex === 0}
-                        title="Previous page"
-                    >
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                            <path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd" />
-                        </svg>
-                    </button>
-                </div>
-
-                <div class="flex items-center gap-2">
-                    <select
-                        class="select select-bordered select-xs"
-                        bind:value={currentPageIndex}
-                    >
-                        {#each document.pages as page, i}
-                            <option value={i}>{page.pageNumber}</option>
-                        {/each}
-                    </select>
-                    <span class="text-xs text-base-content/60">
-                        of {document.pages.length}
-                    </span>
-                </div>
-
-                <div class="flex items-center gap-1">
-                    <button
-                        type="button"
-                        class="btn btn-ghost btn-xs"
-                        onclick={goToNextPage}
-                        disabled={currentPageIndex === document.pages.length - 1}
-                        title="Next page"
-                    >
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                            <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" />
-                        </svg>
-                    </button>
-                    <button
-                        type="button"
-                        class="btn btn-ghost btn-xs"
-                        onclick={() => document && goToPage(document.pages.length - 1)}
-                        disabled={!document || currentPageIndex === document.pages.length - 1}
-                        title="Last page"
-                    >
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                            <path fill-rule="evenodd" d="M4.293 15.707a1 1 0 010-1.414L8.586 10 4.293 5.707a1 1 0 011.414-1.414l5 5a1 1 0 010 1.414l-5 5a1 1 0 01-1.414 0zm6 0a1 1 0 010-1.414L14.586 10l-4.293-4.293a1 1 0 011.414-1.414l5 5a1 1 0 010 1.414l-5 5a1 1 0 01-1.414 0z" clip-rule="evenodd" />
-                        </svg>
-                    </button>
-                </div>
+    <div class="flex-1 overflow-y-auto p-8 font-serif leading-relaxed text-xl selection:bg-primary/30" style="font-family: 'Junicode', serif;">
+        {#if isRendering}
+            <div class="flex flex-col items-center justify-center h-full opacity-50">
+                <span class="loading loading-spinner loading-lg text-primary"></span>
+                <p class="mt-4 font-sans text-sm italic">Rendering manuscript...</p>
+            </div>
+        {:else if !document}
+            <div class="flex items-center justify-center h-full opacity-30 italic">
+                No content to display
+            </div>
+        {:else}
+            <div class="max-w-3xl mx-auto space-y-1">
+                {#each pageTokens as token}
+                    {#if token.type === 'word'}
+                        {@const isConfirmed = confirmedWordSet.has(token.wordIndex!)}
+                        {@const annotationTypes = getWordAnnotationTypes(token.wordIndex!)}
+                        {@const hasSuggestions = inflectionStore.hasInflection(token.diplomatic || '')}
+                        
+                        <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+                        <span 
+                            class="word inline-block px-0.5 rounded cursor-pointer transition-colors relative group"
+                            role="button"
+                            tabindex="0"
+                            class:is-confirmed={isConfirmed}
+                            class:has-suggestion={!isConfirmed && hasSuggestions}
+                            class:is-supplied={token.isSupplied}
+                            class:is-deletion={token.isDeletion}
+                            class:is-addition={token.isAddition}
+                            onclick={(e) => onwordclick?.(token.displayText, token.diplomatic || token.displayText, token.wordIndex!, e.currentTarget as HTMLElement, e.shiftKey)}
+                            title={formatLemmaTooltip(token)}
+                        >
+                            {token.displayText}
+                            
+                            <!-- Annotation Badges -->
+                            {#if annotationTypes.size > 0}
+                                <div class="absolute -top-2 left-0 flex gap-0.5 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
+                                    {#each Array.from(annotationTypes) as type}
+                                        <div 
+                                            class="w-1.5 h-1.5 rounded-full" 
+                                            class:bg-primary={type === 'lemma'}
+                                            class:bg-secondary={type === 'semantic'}
+                                            class:bg-accent={type === 'note'}
+                                            class:bg-info={type === 'paleographic'}
+                                            title={type}
+                                        ></div>
+                                    {/each}
+                                </div>
+                            {/if}
+                        </span>
+                    {:else if token.type === 'punctuation'}
+                        <span class="punctuation">{token.displayText}</span>
+                    {:else if token.type === 'space'}
+                        <span class="space"> </span>
+                    {:else if token.type === 'linebreak'}
+                        <div class="flex items-center gap-4 my-2 opacity-30 select-none pointer-events-none no-print" style="font-family: sans-serif;">
+                            <div class="h-px bg-current flex-1"></div>
+                            <span class="text-[10px] font-mono whitespace-nowrap">Line {token.lineNum || ''}</span>
+                            <div class="h-px bg-current flex-1"></div>
+                        </div>
+                    {:else if token.type === 'pagebreak'}
+                        <div class="flex items-center gap-4 my-8 text-primary opacity-50 select-none pointer-events-none no-print" style="font-family: sans-serif;">
+                            <div class="h-[2px] bg-current flex-1"></div>
+                            <span class="text-xs font-bold font-mono whitespace-nowrap">PAGE {token.pageNum}</span>
+                            <div class="h-[2px] bg-current flex-1"></div>
+                        </div>
+                    {:else}
+                        {token.displayText}
+                    {/if}
+                {/each}
             </div>
         {/if}
-
-        <!-- Document stats bar -->
-        <div class="px-4 py-1 text-xs text-base-content/50 border-b border-base-200">
-            {document.totalWords.toLocaleString()} words / {document.totalTokens.toLocaleString()} tokens
-            {#if document.pages.length > 1}
-                / {document.pages.length} pages
-            {/if}
-        </div>
-
-        <!-- Page content - render visible pages only -->
-        <div class="page-content p-4">
-            {#each visiblePages() as page, pageIdx (page.pageNumber)}
-                <div class="page-section" data-page={page.pageNumber}>
-                    {#each page.tokens as token, i}
-                        {#if token.type === 'word'}
-                            <button
-                                type="button"
-                                class="word-token"
-                                class:is-confirmed={isWordConfirmed(token.wordIndex)}
-                                class:has-suggestion={!isWordConfirmed(token.wordIndex) && hasKnownLemma(token.diplomatic || token.displayText)}
-                                class:has-note={hasAnnotationType(token.wordIndex, 'note')}
-                                class:has-semantic={hasAnnotationType(token.wordIndex, 'semantic')}
-                                class:has-paleographic={hasAnnotationType(token.wordIndex, 'paleographic')}
-                                onclick={(e) => handleWordClick(token, e)}
-                                title={formatLemmaTooltip(token)}
-                            >
-                                {token.displayText}
-                            </button>
-                        {:else if token.type === 'punctuation'}
-                            <span class="punctuation">{token.displayText}</span>
-                        {:else if token.type === 'linebreak'}
-                            <!-- lb marks START of line, so br comes before (except at start or after pb) -->
-                            {#if i > 0 && page.tokens[i - 1]?.type !== 'pagebreak'}
-                                <br />
-                            {/if}
-                            <span class="line-number">{token.lineNumber || ''}</span>
-                        {:else if token.type === 'pagebreak'}
-                            <div class="pagebreak">
-                                <span class="page-indicator">{token.pageNumber || '?'}</span>
-                            </div>
-                        {:else if token.type === 'space'}
-                            {' '}
-                        {:else}
-                            <span class="plain-text">{token.displayText}</span>
-                        {/if}
-                    {/each}
-                </div>
-            {/each}
-        </div>
-    {:else}
-        <div class="p-4 text-base-content/50 text-center">
-            No content to display
-        </div>
-    {/if}
+    </div>
 </div>
 
 <style>
-    .rendered-text {
-        font-family: 'Junicode', Georgia, serif;
+    .word {
+        border-bottom: 1px solid transparent;
     }
-
-    .word-token {
-        display: inline;
-        padding: 0.125rem 0.25rem;
-        margin: 0 -0.125rem;
-        border-radius: 0.25rem;
-        border: 1px solid transparent;
-        background: transparent;
-        cursor: pointer;
-        transition: all 0.15s ease;
-        font: inherit;
-        color: inherit;
+    .word:hover {
+        background-color: var(--color-base-200);
+        border-bottom-color: var(--color-primary);
     }
-
-    .word-token:hover {
-        border-color: var(--color-base-300);
-        background-color: color-mix(in oklch, var(--color-base-200) 50%, transparent);
+    .is-confirmed {
+        border-bottom: 2px solid var(--color-success);
     }
-
-    .word-token:focus {
-        outline: none;
-        border-color: var(--color-primary);
-        background-color: color-mix(in oklch, var(--color-primary) 10%, transparent);
+    .has-suggestion:not(.is-confirmed) {
+        border-bottom: 1px dashed var(--color-primary);
     }
-
-    /* Confirmed words - solid success styling */
-    .word-token.is-confirmed {
-        border-color: var(--color-success);
-        background-color: color-mix(in oklch, var(--color-success) 15%, transparent);
+    .is-supplied {
+        color: var(--color-info);
+        font-style: italic;
     }
-
-    .word-token.is-confirmed:hover {
-        border-color: var(--color-success);
-        background-color: color-mix(in oklch, var(--color-success) 25%, transparent);
+    .is-deletion {
+        text-decoration: line-through;
+        opacity: 0.6;
     }
-
-    /* Unconfirmed words with suggestions - faded styling */
-    .word-token.has-suggestion {
-        border-color: color-mix(in oklch, var(--color-warning) 30%, transparent);
-        opacity: 0.75;
+    .is-addition {
+        vertical-align: super;
+        font-size: 0.85em;
+        color: var(--color-secondary);
     }
-
-    .word-token.has-suggestion:hover {
-        border-color: var(--color-warning);
-        background-color: color-mix(in oklch, var(--color-warning) 15%, transparent);
-        opacity: 1;
-    }
-
-    /* Words with notes - accent underline */
-    .word-token.has-note {
-        border-bottom: 2px dashed var(--color-accent);
-    }
-
-    /* Words with semantic annotations - secondary indicator */
-    .word-token.has-semantic {
-        border-top: 2px solid var(--color-secondary);
-    }
-
-    /* Words with paleographic observations - info indicator */
-    .word-token.has-paleographic {
-        box-shadow: inset 0 0 0 1px var(--color-info);
-    }
-
-    /* Combined states - show multiple indicators */
-    .word-token.has-note.has-semantic {
-        border-bottom: 2px dashed var(--color-accent);
-        border-top: 2px solid var(--color-secondary);
-    }
-
-    .word-token.has-paleographic.is-confirmed {
-        box-shadow: inset 0 0 0 1px var(--color-info);
-        border-color: var(--color-success);
-    }
-
-    .punctuation {
-        color: var(--color-base-content);
-    }
-
-    .line-number {
-        display: inline-block;
-        min-width: 2rem;
-        margin-right: 0.5rem;
-        font-size: 0.75rem;
-        color: var(--color-base-content);
-        opacity: 0.4;
-        font-family: monospace;
-        text-align: right;
-    }
-
-    .pagebreak {
-        display: block;
-        margin: 1.5rem 0;
-        text-align: center;
-    }
-
-    .page-indicator {
-        display: inline-block;
-        padding: 0.25rem 0.75rem;
-        font-size: 0.875rem;
-        color: var(--color-base-content);
-        opacity: 0.4;
-        font-family: monospace;
-        border: 1px dashed currentColor;
-        border-radius: 0.25rem;
-    }
-
-    .plain-text {
-        white-space: pre-wrap;
-    }
-
-    .page-nav {
-        font-family: system-ui, sans-serif;
-    }
-
-    .page-section {
-        /* CSS content-visibility for performance - browser can skip rendering off-screen content */
-        content-visibility: auto;
-        contain-intrinsic-size: auto 500px;
-    }
-
-    .page-content {
-        /* Ensure smooth scrolling between pages */
-        scroll-behavior: smooth;
+    
+    @media print {
+        .no-print { display: none; }
+        .word { border-bottom: none !important; }
     }
 </style>

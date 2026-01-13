@@ -3326,7 +3326,7 @@ checksum = "a50f4cf475b65d88e057964e0e9bb1f0aa9bbb2036dc65c64596b42932536984"
 
 [[package]]
 name = "saga-scribe"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "libxml",
  "log",
@@ -3338,6 +3338,7 @@ dependencies = [
  "tauri-plugin-dialog",
  "tauri-plugin-fs",
  "tauri-plugin-log",
+ "thiserror 2.0.17",
  "tokio",
  "zip",
 ]

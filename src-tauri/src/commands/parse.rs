@@ -1,5 +1,6 @@
 use crate::annotations::AnnotationSet;
 use crate::entities::EntityRegistry;
+use crate::errors::{Result, SagaError};
 use crate::normalizer::LevelDictionary;
 use crate::parser::{Compiler, CompilerConfig, LemmaMapping};
 use std::collections::HashMap;
@@ -24,25 +25,25 @@ pub async fn compile_dsl(
     custom_mappings: Option<HashMap<String, String>>,
     lemma_mappings_json: Option<String>,
     annotations_json: Option<String>,
-) -> Result<String, String> {
+) -> Result<String> {
     // Move all the work to a blocking thread pool to avoid blocking the UI
-    tauri::async_runtime::spawn_blocking(move || {
+    tauri::async_runtime::spawn_blocking(move || -> Result<String> {
         // Load entities if provided
         let mut registry = EntityRegistry::new();
         if let Some(json) = entities_json {
-            registry.load_from_str(&json)?;
+            registry.load_from_str(&json).map_err(SagaError::Validation)?;
         }
 
         // Load level dictionary if provided
         let mut dictionary = match normalizer_json {
-            Some(json) => Some(LevelDictionary::load(&json)?),
+            Some(json) => Some(LevelDictionary::load(&json).map_err(SagaError::Validation)?),
             None => None,
         };
 
         // Load entity base letter mappings if provided
         if let Some(ref mut dict) = dictionary {
             if let Some(ref json) = entity_mappings_json {
-                dict.load_entity_mappings(json)?;
+                dict.load_entity_mappings(json).map_err(SagaError::Validation)?;
             }
             // Apply custom mappings (overrides base mappings)
             if let Some(custom) = custom_mappings {
@@ -53,7 +54,7 @@ pub async fn compile_dsl(
         // Parse lemma mappings if provided (keyed by word INDEX)
         let lemma_mappings: HashMap<u32, LemmaMapping> = match lemma_mappings_json {
             Some(json) => serde_json::from_str(&json)
-                .map_err(|e| format!("Failed to parse lemma mappings: {}", e))?,
+                .map_err(SagaError::Serde)?,
             None => HashMap::new(),
         };
 
@@ -61,7 +62,7 @@ pub async fn compile_dsl(
         let annotations: Option<AnnotationSet> = match annotations_json {
             Some(json) => Some(
                 serde_json::from_str(&json)
-                    .map_err(|e| format!("Failed to parse annotations: {}", e))?,
+                    .map_err(SagaError::Serde)?,
             ),
             None => None,
         };
@@ -89,9 +90,22 @@ pub async fn compile_dsl(
             compiler = compiler.with_dictionary(dict);
         }
 
-        let body = compiler.compile(&input)?;
-        Ok(format!("{}\n{}\n{}", template_header, body, template_footer))
+        let body = compiler.compile(&input).map_err(SagaError::Parser)?;
+        
+        // Build result, only adding newlines between non-empty parts
+        // This prevents XML starting with \n when header is empty
+        let mut result = String::new();
+        if !template_header.is_empty() {
+            result.push_str(&template_header);
+            result.push('\n');
+        }
+        result.push_str(&body);
+        if !template_footer.is_empty() {
+            result.push('\n');
+            result.push_str(&template_footer);
+        }
+        Ok(result)
     })
     .await
-    .map_err(|e| format!("Compilation task failed: {}", e))?
+    .map_err(|e| SagaError::Internal(format!("Compilation task failed: {}", e)))?
 }

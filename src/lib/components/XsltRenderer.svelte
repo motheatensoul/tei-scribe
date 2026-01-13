@@ -1,7 +1,8 @@
 <script lang="ts">
     import { onMount } from 'svelte';
-    import { entityStore } from '$lib/stores/entities';
-    import { lemmaMappings, getInflections } from '$lib/stores/dictionary';
+    import { entityStore } from '$lib/stores/entities.svelte';
+    import { inflectionStore } from '$lib/stores/dictionary.svelte';
+    import { applyXsltTransform } from '$lib/utils/xslt';
 
     let {
         content = '',
@@ -15,6 +16,7 @@
 
     let renderedHtml = $state('');
     let error = $state<string | null>(null);
+    let xslText = $state<string | null>(null);
     let xslProcessor = $state<XSLTProcessor | null>(null);
     let containerEl: HTMLDivElement;
 
@@ -25,7 +27,7 @@
             if (!response.ok) {
                 throw new Error(`Failed to load stylesheet: ${response.statusText}`);
             }
-            const xslText = await response.text();
+            xslText = await response.text();
 
             const parser = new DOMParser();
             const xslDoc = parser.parseFromString(xslText, 'application/xml');
@@ -46,67 +48,29 @@
 
     // Transform XML when content or processor changes
     $effect(() => {
-        if (!xslProcessor || !content.trim()) {
+        if (!content.trim()) {
             renderedHtml = '';
             return;
         }
 
-        try {
-            // Prepare the XML content
-            let xmlContent = content;
-
-            // Replace entity references with placeholders to avoid XML parsing errors
-            const entityPattern = /&([a-zA-Z][a-zA-Z0-9]*);/g;
-            const entityMap = new Map<string, string>();
-            let entityCounter = 0;
-
-            xmlContent = xmlContent.replace(entityPattern, (match, name) => {
-                // Skip standard XML entities
-                if (['lt', 'gt', 'amp', 'quot', 'apos'].includes(name)) {
-                    return match;
-                }
-                const placeholder = `__ENTITY_${entityCounter}__`;
-                entityMap.set(placeholder, name);
-                entityCounter++;
-                return placeholder;
-            });
-
-            const parser = new DOMParser();
-            const xmlDoc = parser.parseFromString(xmlContent, 'application/xml');
-
-            const parseError = xmlDoc.querySelector('parsererror');
-            if (parseError) {
-                error = `XML parse error: ${parseError.textContent}`;
+        async function transform() {
+            try {
+                error = null;
+                // DEBUG: Log what we're receiving
+                console.log('[XsltRenderer] Content length:', content.length);
+                console.log('[XsltRenderer] First 200 chars:', content.substring(0, 200));
+                console.log('[XsltRenderer] Starts with <:', content.trim().startsWith('<'));
+                renderedHtml = await applyXsltTransform(content, xslText || '', entityStore.entities);
+            } catch (e) {
+                error = `Transform error: ${e}`;
+                console.error(error);
+                console.error('[XsltRenderer] Content that failed:', content.substring(0, 500));
                 renderedHtml = '';
-                return;
             }
+        }
 
-            // Apply XSLT transformation
-            const resultDoc = xslProcessor.transformToDocument(xmlDoc);
-
-            if (!resultDoc || !resultDoc.documentElement) {
-                error = 'XSLT transformation produced no output';
-                renderedHtml = '';
-                return;
-            }
-
-            // Get the HTML content
-            let html = resultDoc.documentElement.outerHTML;
-
-            // Resolve entity placeholders to actual glyphs
-            const entities = $entityStore.entities;
-            for (const [placeholder, entityName] of entityMap) {
-                const entity = entities[entityName];
-                const glyph = entity?.char || `[${entityName}]`;
-                html = html.replaceAll(placeholder, glyph);
-            }
-
-            renderedHtml = html;
-            error = null;
-        } catch (e) {
-            error = `Transform error: ${e}`;
-            console.error(error);
-            renderedHtml = '';
+        if (xslText) {
+            transform();
         }
     });
 
@@ -129,13 +93,9 @@
             };
 
             // Add styling based on lemmatization state
-            if (wordIndex in $lemmaMappings.mappings) {
-                element.classList.add('is-confirmed');
-            } else {
-                const inflections = $getInflections(diplomatic);
-                if (inflections.length > 0) {
-                    element.classList.add('has-suggestion');
-                }
+            if (inflectionStore.hasInflection(diplomatic)) {
+                 // We could check if it's confirmed in the session too, but for now just show if it's in dictionary
+                 element.classList.add('has-suggestion');
             }
         });
     });

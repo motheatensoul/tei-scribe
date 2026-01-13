@@ -1,3 +1,4 @@
+use crate::errors::{Result, SagaError};
 use crate::validator::actor::{ValidationRequest, ValidationSender};
 use crate::validator::{SchemaInfo, ValidationResult};
 use std::fs;
@@ -6,7 +7,7 @@ use tauri::{AppHandle, Manager, State};
 use tokio::sync::oneshot;
 
 /// Get the schemas directory path
-fn get_schemas_dir(app: &AppHandle) -> Result<PathBuf, String> {
+fn get_schemas_dir(app: &AppHandle) -> Result<PathBuf> {
     // In production, schemas are bundled as resources
     if let Ok(resource_dir) = app.path().resource_dir() {
         let schemas_path = resource_dir.join("schemas");
@@ -23,18 +24,18 @@ fn get_schemas_dir(app: &AppHandle) -> Result<PathBuf, String> {
 
     // Try from current working directory
     let cwd_path = std::env::current_dir()
-        .map_err(|e| e.to_string())?
+        .map_err(SagaError::Io)?
         .join("static/schemas");
     if cwd_path.exists() {
         return Ok(cwd_path);
     }
 
-    Err("Schemas directory not found".to_string())
+    Err(SagaError::Validation("Schemas directory not found".to_string()))
 }
 
 /// List available schemas
 #[tauri::command]
-pub fn list_schemas(app: AppHandle) -> Result<Vec<SchemaInfo>, String> {
+pub fn list_schemas(app: AppHandle) -> Result<Vec<SchemaInfo>> {
     let schemas_dir = get_schemas_dir(&app)?;
 
     let mut schemas = Vec::new();
@@ -114,7 +115,7 @@ pub async fn validate_xml(
     sender: State<'_, ValidationSender>,
     xml_content: String,
     schema_id: String,
-) -> Result<ValidationResult, String> {
+) -> Result<ValidationResult> {
     let schemas_dir = get_schemas_dir(&app)?;
 
     // Map schema ID to filename
@@ -128,7 +129,7 @@ pub async fn validate_xml(
     let schema_path = schemas_dir.join(schema_file);
 
     if !schema_path.exists() {
-        return Err(format!("Schema not found: {}", schema_id));
+        return Err(SagaError::Validation(format!("Schema not found: {}", schema_id)));
     }
 
     let is_rng = schema_path.extension().and_then(|s| s.to_str()) == Some("rng");
@@ -143,7 +144,7 @@ pub async fn validate_xml(
                 schema_path,
                 reply: tx,
             })
-            .map_err(|e| format!("Failed to send validation request: {}", e))?;
+            .map_err(|e| SagaError::Internal(format!("Failed to send validation request: {}", e)))?;
     } else {
         sender
             .0
@@ -152,11 +153,11 @@ pub async fn validate_xml(
                 schema_path,
                 reply: tx,
             })
-            .map_err(|e| format!("Failed to send validation request: {}", e))?;
+            .map_err(|e| SagaError::Internal(format!("Failed to send validation request: {}", e)))?;
     }
 
     rx.await
-        .map_err(|e| format!("Failed to receive validation response: {}", e))?
+        .map_err(|e| SagaError::Internal(format!("Failed to receive validation response: {}", e)))?
 }
 
 /// Validate XML content against a schema provided as a string
@@ -166,7 +167,7 @@ pub async fn validate_xml_with_schema(
     xml_content: String,
     schema_content: String,
     schema_name: String,
-) -> Result<ValidationResult, String> {
+) -> Result<ValidationResult> {
     let (tx, rx) = oneshot::channel();
 
     // Heuristic to detect if it's RNG or XSD
@@ -181,7 +182,7 @@ pub async fn validate_xml_with_schema(
                 schema_name,
                 reply: tx,
             })
-            .map_err(|e| format!("Failed to send validation request: {}", e))?;
+            .map_err(|e| SagaError::Internal(format!("Failed to send validation request: {}", e)))?;
     } else {
         sender
             .0
@@ -191,9 +192,9 @@ pub async fn validate_xml_with_schema(
                 schema_name,
                 reply: tx,
             })
-            .map_err(|e| format!("Failed to send validation request: {}", e))?;
+            .map_err(|e| SagaError::Internal(format!("Failed to send validation request: {}", e)))?;
     }
 
     rx.await
-        .map_err(|e| format!("Failed to receive validation response: {}", e))?
+        .map_err(|e| SagaError::Internal(format!("Failed to receive validation response: {}", e)))?
 }

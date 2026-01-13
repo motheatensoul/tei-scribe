@@ -1,3 +1,4 @@
+use crate::errors::{Result, SagaError};
 use crate::importer::tei::{self, ImportResult};
 use std::fs;
 use std::path::Path;
@@ -8,10 +9,10 @@ use std::path::Path;
 /// (not the main thread), preventing UI blocking. The actual file I/O and parsing
 /// runs on a blocking thread pool via spawn_blocking.
 #[tauri::command(async)]
-pub async fn import_file(path: String) -> Result<ImportResult, String> {
+pub async fn import_file(path: String) -> Result<ImportResult> {
     // spawn_blocking moves the CPU-bound work to a thread pool,
     // while the async command itself runs off the main thread
-    tauri::async_runtime::spawn_blocking(move || {
+    tauri::async_runtime::spawn_blocking(move || -> Result<ImportResult> {
         let path_obj = Path::new(&path);
         let extension = path_obj
             .extension()
@@ -19,10 +20,10 @@ pub async fn import_file(path: String) -> Result<ImportResult, String> {
             .unwrap_or("")
             .to_lowercase();
 
-        let content = fs::read_to_string(&path).map_err(|e| e.to_string())?;
+        let content = fs::read_to_string(&path)?;
 
         match extension.as_str() {
-            "xml" | "tei" => tei::parse(&content),
+            "xml" | "tei" => tei::parse(&content).map_err(SagaError::Parser),
             // Plain text files - return as DSL with no metadata
             _ => Ok(ImportResult {
                 dsl: content,
@@ -31,5 +32,5 @@ pub async fn import_file(path: String) -> Result<ImportResult, String> {
         }
     })
     .await
-    .map_err(|e| format!("Import task failed: {}", e))?
+    .map_err(|e| SagaError::Internal(format!("Import task failed: {}", e)))?
 }

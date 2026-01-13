@@ -1,3 +1,4 @@
+use crate::errors::{Result, SagaError};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
@@ -32,16 +33,19 @@ pub struct TemplateManager {
 }
 
 impl TemplateManager {
-    pub fn new(app: &AppHandle) -> Result<Self, String> {
-        let app_data = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    pub fn new(app: &AppHandle) -> Result<Self> {
+        let app_data = app
+            .path()
+            .app_data_dir()
+            .map_err(|e| SagaError::Internal(format!("Failed to get app data dir: {}", e)))?;
 
         let templates_dir = app_data.join("templates");
-        fs::create_dir_all(&templates_dir).map_err(|e| e.to_string())?;
+        fs::create_dir_all(&templates_dir).map_err(SagaError::Io)?;
 
         Ok(Self { templates_dir })
     }
 
-    pub fn list_templates(&self) -> Result<Vec<Template>, String> {
+    pub fn list_templates(&self) -> Result<Vec<Template>> {
         let mut templates = Vec::new();
 
         // Include built-in templates
@@ -64,30 +68,32 @@ impl TemplateManager {
         Ok(templates)
     }
 
-    pub fn get_template(&self, id: &str) -> Result<Template, String> {
+    pub fn get_template(&self, id: &str) -> Result<Template> {
         match id {
             "tei-p5" => Ok(self.tei_p5_template()),
             "menota" => Ok(self.menota_template()),
             _ => {
                 let path = self.templates_dir.join(format!("{}.json", id));
-                let content = fs::read_to_string(&path).map_err(|e| e.to_string())?;
-                serde_json::from_str(&content).map_err(|e| e.to_string())
+                let content = fs::read_to_string(&path)?;
+                Ok(serde_json::from_str(&content)?)
             }
         }
     }
 
-    pub fn save_template(&self, template: &Template) -> Result<(), String> {
+    pub fn save_template(&self, template: &Template) -> Result<()> {
         let path = self.templates_dir.join(format!("{}.json", template.id));
-        let content = serde_json::to_string_pretty(template).map_err(|e| e.to_string())?;
-        fs::write(&path, content).map_err(|e| e.to_string())
+        let content = serde_json::to_string_pretty(template)?;
+        fs::write(&path, content)?;
+        Ok(())
     }
 
-    pub fn delete_template(&self, id: &str) -> Result<(), String> {
+    pub fn delete_template(&self, id: &str) -> Result<()> {
         let path = self.templates_dir.join(format!("{}.json", id));
         if path.exists() {
-            fs::remove_file(&path).map_err(|e| e.to_string())
+            fs::remove_file(&path)?;
+            Ok(())
         } else {
-            Err(format!("Template '{}' not found", id))
+            Err(SagaError::Template(format!("Template '{}' not found", id)))
         }
     }
 
