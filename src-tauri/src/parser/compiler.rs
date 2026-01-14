@@ -746,6 +746,35 @@ impl<'a> Compiler<'a> {
             .replace('"', "&quot;")
             .replace('\'', "&apos;")
     }
+
+    /// Compile a DSL fragment for a word element.
+    /// Used by patching module to recompile modified words.
+    pub fn compile_word_from_dsl(
+        &mut self,
+        dsl: &str,
+        attributes: &std::collections::HashMap<String, String>,
+    ) -> String {
+        // TODO: Implement proper DSL fragment compilation
+        // For now, return a placeholder that will be replaced in Phase 5
+        let _ = (dsl, attributes);
+        unimplemented!("compile_word_from_dsl not yet implemented")
+    }
+
+    /// Compile a DSL fragment for a punctuation element.
+    /// Used by patching module to recompile modified punctuation.
+    pub fn compile_punctuation_from_dsl(&mut self, dsl: &str) -> String {
+        // TODO: Implement proper DSL fragment compilation
+        let _ = dsl;
+        unimplemented!("compile_punctuation_from_dsl not yet implemented")
+    }
+
+    /// Compile a DSL fragment (for insertions).
+    /// Used by patching module to compile new content.
+    pub fn compile_fragment_from_dsl(&mut self, dsl: &str) -> String {
+        // TODO: Implement proper DSL fragment compilation
+        let _ = dsl;
+        unimplemented!("compile_fragment_from_dsl not yet implemented")
+    }
 }
 
 impl Default for Compiler<'_> {
