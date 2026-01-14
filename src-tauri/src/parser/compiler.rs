@@ -749,31 +749,144 @@ impl<'a> Compiler<'a> {
 
     /// Compile a DSL fragment for a word element.
     /// Used by patching module to recompile modified words.
+    /// The attributes parameter provides lemma, me:msa, etc. from the original word.
     pub fn compile_word_from_dsl(
         &mut self,
         dsl: &str,
         attributes: &std::collections::HashMap<String, String>,
     ) -> String {
-        // TODO: Implement proper DSL fragment compilation
-        // For now, return a placeholder that will be replaced in Phase 5
-        let _ = (dsl, attributes);
-        unimplemented!("compile_word_from_dsl not yet implemented")
+        // Parse the DSL fragment
+        let mut lexer = Lexer::new(dsl);
+        let doc = match lexer.parse() {
+            Ok(d) => d,
+            Err(_) => return format!("<w><!-- parse error: {} --></w>\n", self.escape_xml(dsl)),
+        };
+
+        // Tokenize to get Word/Punctuation nodes
+        let tokenizer = WordTokenizer::new();
+        let nodes = tokenizer.tokenize(doc.nodes);
+
+        // Find the first Word node (there should only be one for a word fragment)
+        for node in &nodes {
+            if let Node::Word(children) = node {
+                // Generate the three levels
+                let facs = self.nodes_to_facs(children);
+                let dipl = self.nodes_to_diplomatic(children);
+                let norm = self.nodes_to_normalized(children);
+
+                // Format attributes from provided map
+                let mut attr_str = String::new();
+                // Sort keys for consistent output
+                let mut keys: Vec<_> = attributes.keys().collect();
+                keys.sort();
+                for key in keys {
+                    if let Some(value) = attributes.get(key) {
+                        attr_str.push_str(&format!(" {}=\"{}\"", key, self.escape_xml(value)));
+                    }
+                }
+
+                return format!(
+                    "<w{}>\n  <choice>\n    <me:facs>{}</me:facs>\n    <me:dipl>{}</me:dipl>\n    <me:norm>{}</me:norm>\n  </choice>\n</w>\n",
+                    attr_str, facs, dipl, norm
+                );
+            }
+        }
+
+        // Fallback: if no Word node found, compile as plain text
+        format!("<w><!-- no word content: {} --></w>\n", self.escape_xml(dsl))
     }
 
     /// Compile a DSL fragment for a punctuation element.
     /// Used by patching module to recompile modified punctuation.
     pub fn compile_punctuation_from_dsl(&mut self, dsl: &str) -> String {
-        // TODO: Implement proper DSL fragment compilation
-        let _ = dsl;
-        unimplemented!("compile_punctuation_from_dsl not yet implemented")
+        // Parse the DSL fragment
+        let mut lexer = Lexer::new(dsl);
+        let doc = match lexer.parse() {
+            Ok(d) => d,
+            Err(_) => return format!("<pc><!-- parse error: {} --></pc>\n", self.escape_xml(dsl)),
+        };
+
+        // Tokenize to get Word/Punctuation nodes
+        let tokenizer = WordTokenizer::new();
+        let nodes = tokenizer.tokenize(doc.nodes);
+
+        // Find the first Punctuation node
+        for node in &nodes {
+            if let Node::Punctuation(children) = node {
+                // Generate the three levels for punctuation
+                let facs = self.nodes_to_facs(children);
+                let dipl = self.nodes_to_diplomatic(children);
+                let norm = self.nodes_to_normalized(children);
+
+                return format!(
+                    "<pc>\n  <choice>\n    <me:facs>{}</me:facs>\n    <me:dipl>{}</me:dipl>\n    <me:norm>{}</me:norm>\n  </choice>\n</pc>\n",
+                    facs, dipl, norm
+                );
+            }
+        }
+
+        // Fallback: compile as plain punctuation
+        format!("<pc>{}</pc>\n", self.escape_xml(dsl))
     }
 
     /// Compile a DSL fragment (for insertions).
-    /// Used by patching module to compile new content.
+    /// Used by patching module to compile new content that isn't tied to an existing segment.
+    /// Returns compiled XML for all words/punctuation in the fragment.
     pub fn compile_fragment_from_dsl(&mut self, dsl: &str) -> String {
-        // TODO: Implement proper DSL fragment compilation
-        let _ = dsl;
-        unimplemented!("compile_fragment_from_dsl not yet implemented")
+        // Parse the DSL fragment
+        let mut lexer = Lexer::new(dsl);
+        let doc = match lexer.parse() {
+            Ok(d) => d,
+            Err(_) => return format!("<!-- parse error: {} -->", self.escape_xml(dsl)),
+        };
+
+        // Tokenize to get Word/Punctuation nodes
+        let tokenizer = WordTokenizer::new();
+        let nodes = tokenizer.tokenize(doc.nodes);
+
+        // Compile all nodes
+        let mut output = String::new();
+        for node in &nodes {
+            match node {
+                Node::Word(children) => {
+                    let facs = self.nodes_to_facs(children);
+                    let dipl = self.nodes_to_diplomatic(children);
+                    let norm = self.nodes_to_normalized(children);
+
+                    if !facs.is_empty() || !dipl.is_empty() || !norm.is_empty() {
+                        output.push_str(&format!(
+                            "<w>\n  <choice>\n    <me:facs>{}</me:facs>\n    <me:dipl>{}</me:dipl>\n    <me:norm>{}</me:norm>\n  </choice>\n</w>\n",
+                            facs, dipl, norm
+                        ));
+                    }
+                }
+                Node::Punctuation(children) => {
+                    let facs = self.nodes_to_facs(children);
+                    let dipl = self.nodes_to_diplomatic(children);
+                    let norm = self.nodes_to_normalized(children);
+
+                    output.push_str(&format!(
+                        "<pc>\n  <choice>\n    <me:facs>{}</me:facs>\n    <me:dipl>{}</me:dipl>\n    <me:norm>{}</me:norm>\n  </choice>\n</pc>\n",
+                        facs, dipl, norm
+                    ));
+                }
+                Node::LineBreak(n) => {
+                    match n {
+                        Some(num) => output.push_str(&format!("<lb n=\"{}\"/>\n", self.escape_xml(num))),
+                        None => output.push_str("<lb/>\n"),
+                    }
+                }
+                Node::PageBreak(n) => {
+                    output.push_str(&format!("<pb n=\"{}\"/>\n", self.escape_xml(n)));
+                }
+                _ => {
+                    // Other nodes (text, etc.) - compile directly
+                    output.push_str(&self.node_to_xml(node));
+                }
+            }
+        }
+
+        output
     }
 }
 
