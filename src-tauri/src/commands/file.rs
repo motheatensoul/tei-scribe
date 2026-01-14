@@ -140,16 +140,32 @@ pub fn save_project(
             .map_err(|e| format!("Failed to write metadata.json: {}", e))?;
     }
 
+    // Write segments.json if provided (new in v1.3, imported document manifest)
+    if let Some(ref seg_json) = segments_json {
+        zip.start_file("segments.json", options)
+            .map_err(|e| format!("Failed to start segments.json: {}", e))?;
+        zip.write_all(seg_json.as_bytes())
+            .map_err(|e| format!("Failed to write segments.json: {}", e))?;
+    }
+
+    // Write original_body.xml if provided (new in v1.3, original body for round-trip)
+    if let Some(ref body_xml) = original_body_xml {
+        zip.start_file("original_body.xml", options)
+            .map_err(|e| format!("Failed to start original_body.xml: {}", e))?;
+        zip.write_all(body_xml.as_bytes())
+            .map_err(|e| format!("Failed to write original_body.xml: {}", e))?;
+    }
+
     // Create and write manifest.json
     let now = chrono_lite_now();
     let manifest = ProjectManifest {
-        version: "1.2".to_string(),
+        version: "1.3".to_string(),
         template_id,
         created: now.clone(),
         modified: now,
     };
-    let manifest_json =
-        serde_json::to_string_pretty(&manifest).map_err(|e| format!("Failed to serialize manifest: {}", e))?;
+    let manifest_json = serde_json::to_string_pretty(&manifest)
+        .map_err(|e| format!("Failed to serialize manifest: {}", e))?;
     zip.start_file("manifest.json", options)
         .map_err(|e| format!("Failed to start manifest.json: {}", e))?;
     zip.write_all(manifest_json.as_bytes())
@@ -165,7 +181,8 @@ pub fn save_project(
 pub fn open_project(path: String) -> Result<ProjectData, String> {
     let path = PathBuf::from(&path);
     let file = File::open(&path).map_err(|e| format!("Failed to open file: {}", e))?;
-    let mut archive = ZipArchive::new(file).map_err(|e| format!("Failed to read archive: {}", e))?;
+    let mut archive =
+        ZipArchive::new(file).map_err(|e| format!("Failed to read archive: {}", e))?;
 
     // Read source.dsl
     let source = read_zip_file(&mut archive, "source.dsl")?;
@@ -175,8 +192,9 @@ pub fn open_project(path: String) -> Result<ProjectData, String> {
 
     // Read confirmations.json (always present for backward compat)
     let confirmations_str = read_zip_file(&mut archive, "confirmations.json")?;
-    let confirmations: HashMap<u32, LemmaConfirmation> = serde_json::from_str(&confirmations_str)
-        .map_err(|e| format!("Failed to parse confirmations.json: {}", e))?;
+    let confirmations: HashMap<u32, LemmaConfirmation> =
+        serde_json::from_str(&confirmations_str)
+            .map_err(|e| format!("Failed to parse confirmations.json: {}", e))?;
 
     // Read manifest.json
     let manifest_str = read_zip_file(&mut archive, "manifest.json")?;
@@ -196,10 +214,11 @@ pub fn open_project(path: String) -> Result<ProjectData, String> {
     };
 
     // Read imported document data (optional, new in v1.3)
-    let imported_document: Option<ImportedDocument> = match read_zip_file(&mut archive, "segments.json") {
-        Ok(seg_str) => serde_json::from_str(&seg_str).ok(),
-        Err(_) => None, // File doesn't exist in non-imported projects
-    };
+    let imported_document: Option<ImportedDocument> =
+        match read_zip_file(&mut archive, "segments.json") {
+            Ok(seg_str) => serde_json::from_str(&seg_str).ok(),
+            Err(_) => None, // File doesn't exist in non-imported projects
+        };
 
     let original_body_xml: Option<String> = match read_zip_file(&mut archive, "original_body.xml") {
         Ok(body_str) => Some(body_str),
