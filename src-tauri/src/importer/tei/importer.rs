@@ -2,6 +2,9 @@ use crate::metadata::{
     Availability, DateRange, History, Language, Metadata, MsContents, MsIdentifier, Person,
     PhysDesc, PublicationStmt, RespStmt, TitleStmt,
 };
+use crate::importer::tei::extraction::Extractor;
+use crate::importer::tei::helpers;
+use crate::importer::tei::segments::{ImportedDocument, Segment};
 use libxml::parser::Parser;
 use libxml::tree::{Document, Node, NodeType};
 
@@ -13,6 +16,12 @@ pub struct ImportResult {
     pub dsl: String,
     /// Metadata extracted from teiHeader (if present)
     pub metadata: Option<Metadata>,
+    /// Segment manifest for imported documents (enables round-trip fidelity)
+    pub imported_document: Option<ImportedDocument>,
+    /// Original body XML (for imported documents)
+    pub original_body_xml: Option<String>,
+    /// Whether this file was imported in "imported mode" (preserves structure)
+    pub is_imported_mode: bool,
 }
 
 /// Parses TEI-XML content and converts it to Saga-Scribe DSL, also extracting metadata
@@ -34,17 +43,81 @@ pub fn parse(xml_content: &str) -> Result<ImportResult, String> {
     // Find the <body> element specifically to avoid importing header metadata
     let body = find_body(&root).ok_or("No <body> element found in XML")?;
 
-    let mut output = String::new();
-    // Only process children of body
-    process_children(&body, &mut output)?;
+    // Check if this is a MENOTA file (has me:facs/me:dipl/me:norm structure)
+    let is_menota = has_menota_structure(&body);
 
-    // Trim output to avoid massive trailing/leading whitespace from XML structure
-    let trimmed = output.trim();
+    // Serialize original body XML for round-trip preservation
+    let original_body_xml = helpers::serialize_node(&body);
+
+    // Extract segments using the new segment-based extractor
+    let mut extractor = Extractor::new();
+    let segments = extractor.extract_segments(&body);
+
+    // Generate DSL from segments (this is the new, segment-aware path)
+    let dsl = crate::importer::tei::extraction::segments_to_dsl(&segments);
+
+    // Create the imported document manifest
+    let imported_document = ImportedDocument {
+        segments,
+        is_menota,
+    };
+
+    // Trim output to avoid massive trailing/leading whitespace
+    let trimmed = dsl.trim();
 
     Ok(ImportResult {
         dsl: trimmed.to_string(),
         metadata,
+        imported_document: Some(imported_document),
+        original_body_xml: Some(original_body_xml),
+        is_imported_mode: true,
     })
+}
+
+/// Check if the document has MENOTA multi-level structure
+fn has_menota_structure(body: &Node) -> bool {
+    // Look for any <w> element with me:facs child
+    fn check_node(node: &Node) -> bool {
+        if node.get_type() == Some(NodeType::ElementNode) {
+            let name = node.get_name();
+            if name == "w" {
+                // Check for me:facs child
+                let mut child = node.get_first_child();
+                while let Some(c) = child {
+                    if c.get_type() == Some(NodeType::ElementNode) {
+                        let child_name = c.get_name();
+                        if child_name == "me:facs" || child_name.ends_with(":facs") {
+                            return true;
+                        }
+                        // Also check for <choice> containing me:facs
+                        if child_name == "choice" {
+                            let mut gc = c.get_first_child();
+                            while let Some(g) = gc {
+                                if g.get_type() == Some(NodeType::ElementNode) {
+                                    let gc_name = g.get_name();
+                                    if gc_name == "me:facs" || gc_name.ends_with(":facs") {
+                                        return true;
+                                    }
+                                }
+                                gc = g.get_next_sibling();
+                            }
+                        }
+                    }
+                    child = c.get_next_sibling();
+                }
+            }
+            // Recurse into children
+            let mut child = node.get_first_child();
+            while let Some(c) = child {
+                if check_node(&c) {
+                    return true;
+                }
+                child = c.get_next_sibling();
+            }
+        }
+        false
+    }
+    check_node(body)
 }
 
 /// Legacy function for backward compatibility - just returns DSL
