@@ -58,7 +58,10 @@ class ImportedStore {
 
     return compileImported(
       editedDsl,
-      JSON.stringify(this.segments),
+      JSON.stringify({
+        segments: this.segments,
+        is_menota: this.isMenota,
+      }),
       this.originalPreamble,
       this.originalPostamble,
       options,

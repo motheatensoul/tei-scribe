@@ -1,7 +1,7 @@
 use crate::annotations::AnnotationSet;
 use crate::entities::EntityRegistry;
 use crate::importer::tei::patching::{apply_patches_and_reconstruct, compute_patches};
-use crate::importer::tei::segments::ImportedDocument;
+use crate::importer::tei::segments::{ImportedDocument, Segment};
 use crate::normalizer::LevelDictionary;
 use crate::parser::{Compiler, CompilerConfig, LemmaMapping};
 use std::collections::HashMap;
@@ -115,10 +115,18 @@ pub async fn compile_imported(
     custom_mappings: Option<HashMap<String, String>>,
 ) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        // Deserialize the imported document
-        let imported_doc: ImportedDocument = serde_json::from_str(&segments_json)
-            .map_err(|e| format!("Failed to parse segments: {}", e))?;
-
+        // Deserialize the imported document (accept either full manifest or raw segments list)
+        let imported_doc: ImportedDocument = match serde_json::from_str(&segments_json) {
+            Ok(doc) => doc,
+            Err(_) => {
+                let segments: Vec<Segment> = serde_json::from_str(&segments_json)
+                    .map_err(|e| format!("Failed to parse segments: {}", e))?;
+                ImportedDocument {
+                    segments,
+                    is_menota: false,
+                }
+            }
+        };
         // Load entities if provided
         let mut registry = EntityRegistry::new();
         if let Some(json) = entities_json {
