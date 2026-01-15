@@ -56,10 +56,21 @@ impl Extractor {
                     "choice" => {
                         segments.push(self.extract_choice(node));
                     }
+                    "head" => {
+                        let mut content = String::new();
+                        let mut dummy = false;
+                        Self::node_to_dsl(node, &mut content, &mut dummy);
+                        let trimmed = content.trim();
+                        if !trimmed.is_empty() {
+                            let dsl = format!(".head{{{}}}", trimmed);
+                            segments.push(self.extract_inline_element(node, &dsl));
+                        }
+                    }
                     // Handle TEI elements that should be converted to DSL notation
                     // even when they appear outside of <w> tags
                     "gap" => {
-                        segments.push(self.extract_inline_element(node, "[...]"));
+                        let dsl = Self::gap_dsl(node, None);
+                        segments.push(self.extract_inline_element(node, &dsl));
                     }
                     "supplied" => {
                         if self.has_element_children(node) {
@@ -132,14 +143,13 @@ impl Extractor {
                         if self.has_element_children(node) {
                             self.emit_structural(node, segments);
                         } else {
-                            // Abbreviation marker - extract entity name
+                            // Abbreviation marker - keep raw content (entities handled in node_to_dsl)
                             let mut content = String::new();
                             let mut dummy = false;
                             Self::node_to_dsl(node, &mut content, &mut dummy);
                             let trimmed = content.trim();
                             if !trimmed.is_empty() {
-                                let dsl = format!(":{}:", trimmed);
-                                segments.push(self.extract_inline_element(node, &dsl));
+                                segments.push(self.extract_inline_element(node, trimmed));
                             }
                         }
                     }
@@ -233,7 +243,7 @@ impl Extractor {
     fn open_tag(&self, node: &Node) -> String {
         let name = helpers::qualified_name(node);
         let mut tag = format!("<{}", name);
-        for (key, value) in node.get_attributes() {
+        for (key, value) in helpers::attributes_with_ns(node) {
             tag.push_str(&format!(
                 " {}=\"{}\"",
                 key,
@@ -273,8 +283,58 @@ impl Extractor {
         false
     }
 
+    fn find_descendant(node: &Node, target: &str) -> Option<Node> {
+        let mut child = node.get_first_child();
+        while let Some(c) = child {
+            if c.get_type() == Some(NodeType::ElementNode) {
+                let name = helpers::local_name(&c);
+                if name == target {
+                    return Some(c);
+                }
+                if let Some(found) = Self::find_descendant(&c, target) {
+                    return Some(found);
+                }
+            }
+            child = c.get_next_sibling();
+        }
+        None
+    }
+
     fn extract_attributes(&self, node: &Node) -> HashMap<String, String> {
-        node.get_attributes().into_iter().collect()
+        helpers::attributes_with_ns(node).into_iter().collect()
+    }
+
+    fn menota_choice_text(node: &Node, has_inline_lb: &mut bool) -> Option<String> {
+        for level in ["facs", "dipl", "norm"] {
+            if let Some(child) = Self::find_descendant(node, level) {
+                let mut text = String::new();
+                Self::node_to_dsl(&child, &mut text, has_inline_lb);
+                let trimmed = text.trim();
+                if !trimmed.is_empty() {
+                    return Some(trimmed.to_string());
+                }
+            }
+        }
+        None
+    }
+
+    fn gap_dsl(node: &Node, supplied: Option<&str>) -> String {
+        let quantity = node.get_property("quantity");
+        let digits = quantity
+            .as_deref()
+            .map(|value| value.chars().filter(|c| c.is_ascii_digit()).collect::<String>())
+            .filter(|value| !value.is_empty());
+
+        let mut dsl = "[...]".to_string();
+        if let Some(q) = digits {
+            dsl.insert_str(dsl.len() - 1, &q);
+        }
+        if let Some(text) = supplied {
+            if !text.trim().is_empty() {
+                dsl.insert_str(dsl.len() - 1, &format!("<{}>", text.trim()));
+            }
+        }
+        dsl
     }
 
     /// Extract an inline TEI element (gap, supplied, del, add, etc.) as a Word segment
@@ -293,23 +353,14 @@ impl Extractor {
         let attributes = self.extract_attributes(node);
         let original_xml = helpers::serialize_node(node);
 
-        let mut facs_node = None;
-        let mut child = node.get_first_child();
-        while let Some(c) = child {
-            if c.get_type() == Some(NodeType::ElementNode) {
-                let name = helpers::local_name(&c);
-                if name == "facs" {
-                    facs_node = Some(c);
-                    break;
-                }
-            }
-            child = c.get_next_sibling();
-        }
+        let facs_node = Self::find_descendant(node, "facs");
 
         let mut dsl_content = String::new();
         let mut has_inline_lb = false;
 
-        if let Some(facs) = facs_node {
+        if let Some(text) = Self::menota_choice_text(node, &mut has_inline_lb) {
+            dsl_content = text;
+        } else if let Some(facs) = facs_node {
             Self::node_to_dsl(&facs, &mut dsl_content, &mut has_inline_lb);
         } else {
             Self::node_to_dsl(node, &mut dsl_content, &mut has_inline_lb);
@@ -328,23 +379,14 @@ impl Extractor {
         let original_xml = helpers::serialize_node(node);
 
         // Look for me:facs child (or direct content)
-        let mut facs_node = None;
-        let mut child = node.get_first_child();
-        while let Some(c) = child {
-            if c.get_type() == Some(NodeType::ElementNode) {
-                let name = helpers::local_name(&c);
-                if name == "facs" {
-                    facs_node = Some(c);
-                    break;
-                }
-            }
-            child = c.get_next_sibling();
-        }
+        let facs_node = Self::find_descendant(node, "facs");
 
         let mut dsl_content = String::new();
         let mut has_inline_lb = false;
 
-        if let Some(facs) = facs_node {
+        if let Some(text) = Self::menota_choice_text(node, &mut has_inline_lb) {
+            dsl_content = text;
+        } else if let Some(facs) = facs_node {
             Self::node_to_dsl(&facs, &mut dsl_content, &mut has_inline_lb);
         } else {
             Self::node_to_dsl(node, &mut dsl_content, &mut has_inline_lb);
@@ -398,8 +440,11 @@ impl Extractor {
         if found_abbr && found_expan {
             // Abbreviation pattern: .abbr[abbr]{expan}
             dsl_content = format!(".abbr[{}]{{{}}}", abbr_text, expan_text);
+        } else if let Some(text) = Self::menota_choice_text(node, &mut has_inline_lb) {
+            // MENOTA multi-level pattern: prefer facs, then dipl, then norm
+            dsl_content = text;
         } else if let Some(facs) = facs_node {
-            // MENOTA multi-level pattern: extract from facs
+            // Fallback: extract from facs if available
             Self::node_to_dsl(&facs, &mut dsl_content, &mut has_inline_lb);
         } else {
             // Fallback: process all children
@@ -418,6 +463,7 @@ impl Extractor {
     fn node_to_dsl(node: &Node, output: &mut String, has_inline_lb: &mut bool) {
         let mut child = node.get_first_child();
         while let Some(c) = child {
+            let mut next_child = c.get_next_sibling();
             match c.get_type() {
                 Some(NodeType::TextNode) => {
                     let content = c.get_content();
@@ -468,6 +514,7 @@ impl Extractor {
                             let mut expan_text = String::new();
                             let mut found_abbr = false;
                             let mut found_expan = false;
+                            let mut facs_node = None;
 
                             let mut gc = c.get_first_child();
                             while let Some(gcc) = gc {
@@ -479,6 +526,8 @@ impl Extractor {
                                     } else if gc_name == "expan" {
                                         found_expan = true;
                                         Self::node_to_dsl(&gcc, &mut expan_text, has_inline_lb);
+                                    } else if gc_name == "facs" {
+                                        facs_node = Some(gcc.clone());
                                     }
                                 }
                                 gc = gcc.get_next_sibling();
@@ -486,14 +535,27 @@ impl Extractor {
 
                             if found_abbr && found_expan {
                                 output.push_str(&format!(".abbr[{}]{{{}}}", abbr_text, expan_text));
+                            } else if let Some(text) = Self::menota_choice_text(&c, has_inline_lb) {
+                                output.push_str(&text);
+                            } else if let Some(facs) = facs_node {
+                                Self::node_to_dsl(&facs, output, has_inline_lb);
                             } else {
-                                Self::node_to_dsl(&c, output, has_inline_lb);
+                                let mut gc = c.get_first_child();
+                                while let Some(gcc) = gc {
+                                    if gcc.get_type() == Some(NodeType::ElementNode) {
+                                        let gc_name = helpers::local_name(&gcc);
+                                        if gc_name == "dipl" || gc_name == "norm" {
+                                            gc = gcc.get_next_sibling();
+                                            continue;
+                                        }
+                                    }
+                                    Self::node_to_dsl(&gcc, output, has_inline_lb);
+                                    gc = gcc.get_next_sibling();
+                                }
                             }
                         }
                         "am" => {
-                            output.push(':');
                             Self::node_to_dsl(&c, output, has_inline_lb);
-                            output.push(':');
                         }
                         "c" => {
                             output.push_str(&c.get_content());
@@ -539,7 +601,21 @@ impl Extractor {
                             }
                         }
                         "gap" => {
-                            output.push_str("[...]");
+                            let mut supplied_text = None;
+                            if let Some(next) = c.get_next_sibling() {
+                                if next.get_type() == Some(NodeType::ElementNode)
+                                    && helpers::local_name(&next) == "supplied"
+                                {
+                                    let mut inner = String::new();
+                                    Self::node_to_dsl(&next, &mut inner, has_inline_lb);
+                                    let trimmed = inner.trim();
+                                    if !trimmed.is_empty() {
+                                        supplied_text = Some(trimmed.to_string());
+                                        next_child = next.get_next_sibling();
+                                    }
+                                }
+                            }
+                            output.push_str(&Self::gap_dsl(&c, supplied_text.as_deref()));
                         }
                         "note" => {
                             let mut inner = String::new();
@@ -568,7 +644,7 @@ impl Extractor {
                 }
                 _ => {}
             }
-            child = c.get_next_sibling();
+            child = next_child;
         }
     }
 }

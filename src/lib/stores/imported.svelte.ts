@@ -14,6 +14,7 @@ export interface ImportedState {
 class ImportedStore {
   isImportedMode = $state(false);
   segments = $state<Segment[]>([]);
+  segmentsJson = $state<string | null>(null);
   originalBodyXml = $state("");
   originalPreamble = $state("");
   originalPostamble = $state("");
@@ -24,6 +25,7 @@ class ImportedStore {
   reset() {
     this.isImportedMode = false;
     this.segments = [];
+    this.segmentsJson = null;
     this.originalBodyXml = "";
     this.originalPreamble = "";
     this.originalPostamble = "";
@@ -41,6 +43,10 @@ class ImportedStore {
     if (data.frontMatter) this.frontMatter = data.frontMatter;
     if (data.backMatter) this.backMatter = data.backMatter;
     if (data.isMenota !== undefined) this.isMenota = data.isMenota;
+    this.segmentsJson = JSON.stringify({
+      segments: this.segments,
+      is_menota: this.isMenota,
+    });
   }
 
   async compile(
@@ -56,12 +62,16 @@ class ImportedStore {
       throw new Error("Not in imported mode");
     }
 
-    return compileImported(
-      editedDsl,
+    const manifestJson =
+      this.segmentsJson ??
       JSON.stringify({
         segments: this.segments,
         is_menota: this.isMenota,
-      }),
+      });
+
+    return compileImported(
+      editedDsl,
+      manifestJson,
       this.originalPreamble,
       this.originalPostamble,
       options,

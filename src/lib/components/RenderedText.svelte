@@ -92,6 +92,15 @@
         })();
     });
 
+    function sliceTag(xml: string, tagName: string): string | null {
+        const lower = xml.toLowerCase();
+        const start = lower.indexOf(`<${tagName}`);
+        if (start === -1) return null;
+        const end = lower.indexOf(`</${tagName}>`, start);
+        if (end === -1) return null;
+        return xml.slice(start, end + tagName.length + 3);
+    }
+
     // Async version of parseXml that yields to main thread periodically
     // Returns ParsedDocument with tokens grouped by page
     async function parseXmlAsync(xml: string, entityDefs: EntityMap): Promise<ParsedDocument> {
@@ -102,14 +111,23 @@
             // Strip XML declaration if present (breaks when wrapped)
             let cleanXml = xml.replace(/<\?xml[^?]*\?>\s*/gi, '');
 
+            // Strip DOCTYPE/entity declarations (not supported when wrapped)
+            cleanXml = cleanXml
+                .replace(/<!DOCTYPE[\s\S]*?\]>\s*/gi, '')
+                .replace(/<!DOCTYPE[^>]*>\s*/gi, '');
+
+            const bodyFragment = sliceTag(cleanXml, 'body') ?? sliceTag(cleanXml, 'text');
+            const xmlFragment = bodyFragment ?? cleanXml;
+
             // Replace entity references with placeholders to avoid XML parsing errors
             const entityPattern = /&([a-zA-Z][a-zA-Z0-9]*);/g;
-            const entityMap = new Map<string, string>();
+            const placeholderGlyphs = new Map<string, string>();
             let entityCounter = 0;
 
-            const sanitized = cleanXml.replace(entityPattern, (match, name) => {
+            const sanitized = xmlFragment.replace(entityPattern, (match, name) => {
                 const placeholder = `__ENTITY_${entityCounter}__`;
-                entityMap.set(placeholder, name);
+                const glyph = entityDefs[name]?.char || `[${name}]`;
+                placeholderGlyphs.set(placeholder, glyph);
                 entityCounter++;
                 return placeholder;
             });
@@ -164,7 +182,14 @@
             const yieldCounter = { count: 0 };
             const YIELD_EVERY = 500; // Yield every 500 tokens for smooth animation
 
-            await extractTokensAsync(target, allTokens, entityMap, entityDefs, wordCounter, yieldCounter, YIELD_EVERY);
+            await extractTokensAsync(
+                target,
+                allTokens,
+                placeholderGlyphs,
+                wordCounter,
+                yieldCounter,
+                YIELD_EVERY,
+            );
 
             // If no tokens extracted, show a message
             if (allTokens.length === 0) {
@@ -240,24 +265,23 @@
         }
     }
 
+    const placeholderPattern = /__ENTITY_\d+__/g;
+
     // Resolve entity placeholders to actual glyphs
-    function resolveEntitiesToGlyphs(text: string, entityMap: Map<string, string>, entityDefs: EntityMap): string {
-        let result = text;
-        for (const [placeholder, entityName] of entityMap) {
-            // Look up the entity in our entity definitions
-            const entity = entityDefs[entityName];
-            const glyph = entity?.char || `[${entityName}]`;
-            result = result.replaceAll(placeholder, glyph);
+    function resolveEntitiesToGlyphs(text: string, placeholderGlyphs: Map<string, string>): string {
+        if (!text.includes('__ENTITY_')) {
+            return text;
         }
-        return result;
+        return text.replace(placeholderPattern, (placeholder) => {
+            return placeholderGlyphs.get(placeholder) ?? placeholder;
+        });
     }
 
     // Async version of extractTokens that yields periodically
     async function extractTokensAsync(
         node: Node,
         result: TextToken[],
-        entityMap: Map<string, string>,
-        entityDefs: EntityMap,
+        placeholderGlyphs: Map<string, string>,
         wordCounter: { index: number },
         yieldCounter: { count: number },
         yieldEvery: number
@@ -274,7 +298,7 @@
                 if (text.trim()) {
                     result.push({
                         type: 'text',
-                        displayText: resolveEntitiesToGlyphs(text, entityMap, entityDefs),
+                        displayText: resolveEntitiesToGlyphs(text, placeholderGlyphs),
                     });
                 }
             } else if (child.nodeType === Node.ELEMENT_NODE) {
@@ -287,8 +311,8 @@
                         const diplEl = el.querySelector('me\\:dipl, dipl');
                         const facsRaw = facsEl?.textContent || el.textContent || '';
                         const diplRaw = diplEl?.textContent || facsRaw;
-                        const displayText = resolveEntitiesToGlyphs(facsRaw, entityMap, entityDefs).trim();
-                        const diplomatic = resolveEntitiesToGlyphs(diplRaw, entityMap, entityDefs).trim();
+                        const displayText = resolveEntitiesToGlyphs(facsRaw, placeholderGlyphs).trim();
+                        const diplomatic = resolveEntitiesToGlyphs(diplRaw, placeholderGlyphs).trim();
                         const wordIndex = wordCounter.index;
                         wordCounter.index++;
 
@@ -301,7 +325,7 @@
                     case 'pc': {
                         const facsEl = el.querySelector('me\\:facs, facs');
                         const facsRaw = facsEl?.textContent || el.textContent || '';
-                        const displayText = resolveEntitiesToGlyphs(facsRaw, entityMap, entityDefs).trim();
+                        const displayText = resolveEntitiesToGlyphs(facsRaw, placeholderGlyphs).trim();
                         if (displayText) {
                             result.push({ type: 'punctuation', displayText });
                             result.push({ type: 'space', displayText: ' ' });
@@ -324,28 +348,28 @@
                         break;
                     }
                     case 'supplied': {
-                        const text = resolveEntitiesToGlyphs(el.textContent || '', entityMap, entityDefs);
+                        const text = resolveEntitiesToGlyphs(el.textContent || '', placeholderGlyphs);
                         result.push({ type: 'text', displayText: `⟨${text}⟩` });
                         break;
                     }
                     case 'unclear': {
-                        const text = resolveEntitiesToGlyphs(el.textContent || '', entityMap, entityDefs);
+                        const text = resolveEntitiesToGlyphs(el.textContent || '', placeholderGlyphs);
                         result.push({ type: 'text', displayText: `${text}?` });
                         break;
                     }
                     case 'del': {
-                        const text = resolveEntitiesToGlyphs(el.textContent || '', entityMap, entityDefs);
+                        const text = resolveEntitiesToGlyphs(el.textContent || '', placeholderGlyphs);
                         result.push({ type: 'text', displayText: `⟦${text}⟧` });
                         break;
                     }
                     case 'add': {
-                        const text = resolveEntitiesToGlyphs(el.textContent || '', entityMap, entityDefs);
+                        const text = resolveEntitiesToGlyphs(el.textContent || '', placeholderGlyphs);
                         result.push({ type: 'text', displayText: `\\${text}/` });
                         break;
                     }
                     case 'choice': {
                         const abbr = el.querySelector('abbr')?.textContent || '';
-                        const text = resolveEntitiesToGlyphs(abbr, entityMap, entityDefs);
+                        const text = resolveEntitiesToGlyphs(abbr, placeholderGlyphs);
                         if (text) {
                             result.push({ type: 'text', displayText: text });
                             result.push({ type: 'space', displayText: ' ' });
@@ -354,7 +378,7 @@
                     }
                     default:
                         // Recurse into other elements
-                        await extractTokensAsync(el, result, entityMap, entityDefs, wordCounter, yieldCounter, yieldEvery);
+                        await extractTokensAsync(el, result, placeholderGlyphs, wordCounter, yieldCounter, yieldEvery);
                 }
             }
         }

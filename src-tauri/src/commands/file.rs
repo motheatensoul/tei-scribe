@@ -94,6 +94,7 @@ pub struct ProjectData {
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub fn save_project(
     path: String,
     source: String,
@@ -225,40 +226,23 @@ pub fn open_project(path: String) -> Result<ProjectData, String> {
         .map_err(|e| format!("Failed to parse manifest.json: {}", e))?;
 
     // Read metadata.json (optional, new in v1.1)
-    let metadata: Option<Metadata> = match read_zip_file(&mut archive, "metadata.json") {
-        Ok(meta_str) => serde_json::from_str(&meta_str).ok(),
-        Err(_) => None, // File doesn't exist in older projects
-    };
+    let metadata: Option<Metadata> = read_zip_file(&mut archive, "metadata.json")
+        .ok()
+        .and_then(|meta_str| serde_json::from_str(&meta_str).ok());
 
     // Read annotations.json (optional, new in v1.2)
-    let annotations: Option<AnnotationSet> = match read_zip_file(&mut archive, "annotations.json") {
-        Ok(ann_str) => serde_json::from_str(&ann_str).ok(),
-        Err(_) => None, // File doesn't exist in older projects
-    };
+    let annotations: Option<AnnotationSet> = read_zip_file(&mut archive, "annotations.json")
+        .ok()
+        .and_then(|ann_str| serde_json::from_str(&ann_str).ok());
 
     // Read imported document data (optional, new in v1.3)
-    let imported_document: Option<ImportedDocument> =
-        match read_zip_file(&mut archive, "segments.json") {
-            Ok(seg_str) => serde_json::from_str(&seg_str).ok(),
-            Err(_) => None, // File doesn't exist in non-imported projects
-        };
+    let imported_document: Option<ImportedDocument> = read_zip_file(&mut archive, "segments.json")
+        .ok()
+        .and_then(|seg_str| serde_json::from_str(&seg_str).ok());
 
-    let original_body_xml: Option<String> = match read_zip_file(&mut archive, "original_body.xml") {
-        Ok(body_str) => Some(body_str),
-        Err(_) => None, // File doesn't exist in non-imported projects
-    };
-
-    let original_preamble: Option<String> =
-        match read_zip_file(&mut archive, "original_preamble.xml") {
-            Ok(preamble_str) => Some(preamble_str),
-            Err(_) => None,
-        };
-
-    let original_postamble: Option<String> =
-        match read_zip_file(&mut archive, "original_postamble.xml") {
-            Ok(postamble_str) => Some(postamble_str),
-            Err(_) => None,
-        };
+    let original_body_xml = read_zip_file(&mut archive, "original_body.xml").ok();
+    let original_preamble = read_zip_file(&mut archive, "original_preamble.xml").ok();
+    let original_postamble = read_zip_file(&mut archive, "original_postamble.xml").ok();
 
     Ok(ProjectData {
         source,

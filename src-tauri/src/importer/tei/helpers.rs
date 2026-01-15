@@ -1,6 +1,6 @@
 //! Helper functions for TEI XML extraction and serialization.
 
-use libxml::tree::{Node, NodeType};
+use libxml::tree::{Namespace, Node, NodeType};
 
 /// Extract the local name of an element, stripping any namespace prefix.
 /// For example, "me:facs" becomes "facs".
@@ -68,6 +68,28 @@ pub fn qualified_name(node: &Node) -> String {
     }
 }
 
+pub fn attributes_with_ns(node: &Node) -> Vec<(String, String)> {
+    node.get_attributes_ns()
+        .into_iter()
+        .map(|((name, ns), value)| {
+            let key = match ns {
+                Some(namespace) => qualify_attribute(&name, &namespace),
+                None => name,
+            };
+            (key, value)
+        })
+        .collect()
+}
+
+fn qualify_attribute(name: &str, namespace: &Namespace) -> String {
+    let prefix = namespace.get_prefix();
+    if prefix.is_empty() {
+        name.to_string()
+    } else {
+        format!("{}:{}", prefix, name)
+    }
+}
+
 fn serialize_node_internal(node: &Node, output: &mut String) {
     match node.get_type() {
         Some(NodeType::ElementNode) => {
@@ -76,7 +98,7 @@ fn serialize_node_internal(node: &Node, output: &mut String) {
             output.push_str(&name);
 
             // Serialize attributes
-            for (key, value) in node.get_attributes() {
+            for (key, value) in attributes_with_ns(node) {
                 output.push(' ');
                 output.push_str(&key);
                 output.push_str("=\"");

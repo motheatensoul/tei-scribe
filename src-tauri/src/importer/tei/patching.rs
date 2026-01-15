@@ -98,12 +98,14 @@ fn parse_dsl_to_tokens(dsl: &str) -> Vec<TokenInfo> {
     nodes
         .into_iter()
         .filter_map(|node| match &node {
-            Node::Word(_) | Node::Punctuation(_) | Node::LineBreak(_) | Node::PageBreak(_) => {
-                Some(TokenInfo {
-                    content: node_to_dsl(&node),
-                    segment_id: None,
-                })
-            }
+            Node::Word(_)
+            | Node::Punctuation(_)
+            | Node::LineBreak(_)
+            | Node::PageBreak(_)
+            | Node::Head(_) => Some(TokenInfo {
+                content: node_to_dsl(&node),
+                segment_id: None,
+            }),
             _ => None,
         })
         .collect()
@@ -138,6 +140,7 @@ fn node_to_dsl(node: &Node) -> String {
         Node::Deletion(t) => format!("-{{{}}}-", t),
         Node::Addition(t) => format!("+{{{}}}+", t),
         Node::Note(t) => format!("^{{{}}}", t),
+        Node::Head(t) => format!(".head{{{}}}", t),
         Node::Unclear(t) => format!("?{{{}}}?", t),
         Node::Entity(name) => format!(":{}:", name),
         Node::WordContinuation => "~".to_string(),
@@ -184,9 +187,9 @@ fn diff_tokens(original: &[TokenInfo], edited: &[TokenInfo]) -> Vec<PatchOperati
     let mut patches = Vec::new();
 
     // Add Keep for common prefix
-    for k in 0..start {
+    for token in original.iter().take(start) {
         patches.push(PatchOperation::Keep {
-            segment_id: original[k].segment_id.unwrap(),
+            segment_id: token.segment_id.unwrap(),
         });
     }
 
@@ -198,9 +201,9 @@ fn diff_tokens(original: &[TokenInfo], edited: &[TokenInfo]) -> Vec<PatchOperati
     }
 
     // Add Keep for common suffix
-    for k in original_end..m {
+    for token in original.iter().skip(original_end) {
         patches.push(PatchOperation::Keep {
-            segment_id: original[k].segment_id.unwrap(),
+            segment_id: token.segment_id.unwrap(),
         });
     }
 
@@ -217,9 +220,11 @@ fn diff_tokens_lcs(original: &[TokenInfo], edited: &[TokenInfo]) -> Vec<PatchOpe
         let mut fallback = Vec::new();
         let min_len = m.min(n);
 
-        for i in 0..min_len {
-            let original_token = &original[i];
-            let edited_token = &edited[i];
+        for (original_token, edited_token) in original
+            .iter()
+            .take(min_len)
+            .zip(edited.iter().take(min_len))
+        {
             let segment_id = original_token.segment_id.unwrap();
 
             if original_token.content == edited_token.content {
@@ -357,9 +362,16 @@ fn reconstruct_from_segments_and_patches(
                                 }
                                 PatchOperation::Modify { new_dsl, .. } => match seg {
                                     Segment::Word { attributes, .. } => {
-                                        xml.push_str(
-                                            &compiler.compile_word_from_dsl(new_dsl, attributes),
-                                        );
+                                        if new_dsl.trim_start().starts_with(".head{") {
+                                            xml.push_str(
+                                                &compiler.compile_fragment_from_dsl(new_dsl),
+                                            );
+                                        } else {
+                                            xml.push_str(
+                                                &compiler
+                                                    .compile_word_from_dsl(new_dsl, attributes),
+                                            );
+                                        }
                                     }
                                     Segment::Punctuation { .. } => {
                                         xml.push_str(

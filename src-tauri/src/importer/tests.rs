@@ -1,6 +1,7 @@
 use super::tei::parse;
 use crate::importer::tei::helpers;
 use crate::importer::tei::patching::{apply_patches_and_reconstruct, compute_patches};
+use crate::importer::tei::segments::Segment;
 use crate::parser::{Compiler, CompilerConfig, Lexer};
 use libxml::parser::Parser;
 use libxml::tree::NodeType;
@@ -40,10 +41,47 @@ fn test_import_gap() {
 }
 
 #[test]
+fn test_import_gap_with_supplied_quantity() {
+    let xml = "<body><w><gap quantity=\"3\"/><supplied>abc</supplied></w></body>";
+    let result = parse(xml).unwrap();
+    assert_eq!(result.dsl, "[...3<abc>]");
+}
+
+#[test]
 fn test_import_supplied() {
     let xml = "<body>start <supplied>missing</supplied> end</body>";
     let result = parse(xml).unwrap();
     assert_eq!(result.dsl, "start <missing> end");
+}
+
+#[test]
+fn test_import_head() {
+    let xml = "<body><head>Title</head><p>text</p></body>";
+    let result = parse(xml).unwrap();
+    assert!(result.dsl.contains(".head{Title}"));
+}
+
+#[test]
+fn test_import_choice_facs() {
+    let xml = "<body xmlns:me=\"http://www.menota.org/ns/1.0\"><w><choice><me:facs>foo</me:facs><me:dipl>bar</me:dipl></choice></w></body>";
+    let result = parse(xml).unwrap();
+    assert_eq!(result.dsl, "foo");
+}
+
+#[test]
+fn test_import_preserves_msa_attribute() {
+    let xml = "<body xmlns:me=\"http://www.menota.org/ns/1.0\"><w lemma=\"land\" me:msa=\"xNC\">land</w></body>";
+    let result = parse(xml).unwrap();
+    let doc = result.imported_document.expect("Expected imported document");
+    let word_attrs = doc
+        .segments
+        .iter()
+        .find_map(|segment| match segment {
+            Segment::Word { attributes, .. } => Some(attributes),
+            _ => None,
+        })
+        .expect("Expected word segment");
+    assert_eq!(word_attrs.get("me:msa"), Some(&"xNC".to_string()));
 }
 
 #[test]
@@ -375,7 +413,6 @@ fn test_import_character_annotation() {
 // ============================================================================
 
 #[test]
-#[ignore = "Abbreviation markers (<am>/<ex>) are not properly imported"]
 fn test_import_am_ex_markers() {
     let xml = r#"<body>
         <choice>
@@ -384,10 +421,9 @@ fn test_import_am_ex_markers() {
         </choice>
     </body>"#;
     let result = parse(xml).unwrap();
-    
+
     // Should produce .abbr[þ̃]{þat} preserving the combining character
-    println!("am/ex import result: '{}'", result.dsl);
-    assert!(result.dsl.contains(".abbr["), "Should produce abbreviation syntax");
+    assert_eq!(result.dsl.trim(), ".abbr[þ̃]{þat}");
 }
 
 fn normalize_xml(xml: &str) -> String {

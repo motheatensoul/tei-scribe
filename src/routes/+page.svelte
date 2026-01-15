@@ -42,6 +42,7 @@
         exportInflections,
         generateTeiHeader,
     } from "$lib/tauri";
+    import type { InflectedForm } from "$lib/tauri";
     import { generateStandaloneHtml } from "$lib/utils/htmlExport";
     import { printToPdf } from "$lib/utils/pdfExport";
     import {
@@ -101,6 +102,26 @@
     let showMetadataEditor = $state(false);
     let currentMetadata = $state<Metadata | undefined>(undefined);
 
+    function stripXmlTags(text: string): string {
+        return text.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
+    }
+
+    function extractTagText(xml: string, tagName: string): string | null {
+        const regex = new RegExp(
+            `<${tagName}\\b[^>]*>([\\s\\S]*?)<\\/${tagName}>`,
+            "i",
+        );
+        const match = xml.match(regex);
+        if (!match) {
+            return null;
+        }
+        const cleaned = stripXmlTags(match[1]);
+        return cleaned.length > 0 ? cleaned : null;
+    }
+
+    function extractMenotaText(xml: string, tagName: string): string | null {
+        return extractTagText(xml, `me:${tagName}`) ?? extractTagText(xml, tagName);
+    }
     onMount(async () => {
         errorStore.info("App", "Application starting...");
 
@@ -1025,12 +1046,75 @@
                     preamble: result.originalPreamble ?? "",
                     postamble: result.originalPostamble ?? "",
                 });
+
+                const lemmaConfirmations: Record<
+                    number,
+                    { lemma: string; msa: string; normalized?: string }
+                > = {};
+                const inflectionMap = new Map<string, InflectedForm>();
+                let wordIndex = 0;
+
+                for (const segment of result.importedDocument.segments) {
+                    if (segment.type !== "Word") {
+                        continue;
+                    }
+                    const lemma = segment.attributes.lemma;
+                    const msa =
+                        segment.attributes["me:msa"] ?? segment.attributes.msa ?? "";
+                    const normalized = extractMenotaText(
+                        segment.original_xml,
+                        "norm",
+                    );
+
+                    if (lemma && msa) {
+                        lemmaConfirmations[wordIndex] = {
+                            lemma,
+                            msa,
+                            normalized: normalized ?? undefined,
+                        };
+
+                        const diplomatic = extractMenotaText(
+                            segment.original_xml,
+                            "dipl",
+                        );
+                        const facsimile = extractMenotaText(
+                            segment.original_xml,
+                            "facs",
+                        );
+                        const wordform = (diplomatic ?? facsimile ?? "").trim();
+
+                        if (wordform) {
+                            const partOfSpeech = msa.split(/\s+/)[0] ?? "";
+                            const key = `${wordform.toLowerCase()}|${lemma}|${msa}`;
+                            if (!inflectionMap.has(key)) {
+                                inflectionMap.set(key, {
+                                    onp_id: `imported:${lemma}`,
+                                    lemma,
+                                    analysis: msa,
+                                    part_of_speech: partOfSpeech,
+                                    facsimile: facsimile ?? undefined,
+                                    diplomatic: diplomatic ?? undefined,
+                                    normalized: normalized ?? undefined,
+                                });
+                            }
+                        }
+                    }
+
+                    wordIndex += 1;
+                }
+
+                if (Object.keys(lemmaConfirmations).length > 0) {
+                    annotationStore.loadLegacyConfirmations(lemmaConfirmations);
+                }
+
+                for (const [key, mapping] of inflectionMap) {
+                    const [wordform] = key.split("|");
+                    inflectionStore.addMapping(wordform, mapping);
+                }
             } else {
                 importedStore.reset();
                 preservationStore.clear();
             }
-
-            const compiled = await compileOnly(result.dsl);
 
             editorComponent?.setContent(result.dsl);
 
@@ -1043,6 +1127,17 @@
             if (result.metadata) {
                 currentMetadata = result.metadata;
                 metadataStore.setMetadata(result.metadata);
+            }
+
+            isImporting = false;
+
+            // Let the editor render before compiling
+            await tick();
+            await new Promise((resolve) => setTimeout(resolve, 16));
+
+            const compiled = await compileOnly(result.dsl);
+
+            if (result.metadata) {
                 errorStore.info("Import", `Imported content and metadata from ${pathStr}`);
             } else {
                 errorStore.info("Import", `Imported content from ${pathStr}`);
@@ -1054,8 +1149,6 @@
         } catch (e) {
             errorStore.error("Import", `Failed to import: ${e}`);
         } finally {
-            // Wait for RenderedText async parsing to complete before hiding spinner
-            await new Promise((resolve) => setTimeout(resolve, 500));
             isImporting = false;
         }
     }

@@ -166,6 +166,10 @@ impl<'a> Compiler<'a> {
             Node::Deletion(text) => format!("<del>{}</del>", self.escape_xml(text)),
             Node::Addition(text) => format!("<add>{}</add>", self.escape_xml(text)),
             Node::Note(text) => format!("<note>{}</note>", self.escape_xml(text)),
+            Node::Head(text) => {
+                let content = self.compile_fragment_from_dsl(text);
+                format!("<head>{}</head>", content)
+            }
             Node::Unclear(text) => format!("<unclear>{}</unclear>", self.escape_xml(text)),
             Node::Entity(name) => self.compile_entity(name),
             Node::WordContinuation => String::new(), // Consumed by word tokenizer
@@ -592,6 +596,7 @@ impl<'a> Compiler<'a> {
             Node::Deletion(text) => format!("<del>{}</del>", self.escape_xml(text)),
             Node::Addition(text) => format!("<add>{}</add>", self.escape_xml(text)),
             Node::Note(text) => format!("<note>{}</note>", self.escape_xml(text)),
+            Node::Head(_) => String::new(),
             Node::CompoundJoin => " ".to_string(), // Space in facsimile
             Node::LineBreak(_) | Node::PageBreak(_) => String::new(), // Handled outside word
             _ => String::new(),
@@ -646,6 +651,7 @@ impl<'a> Compiler<'a> {
             Node::Deletion(text) => format!("<del>{}</del>", self.escape_xml(text)),
             Node::Addition(text) => format!("<add>{}</add>", self.escape_xml(text)),
             Node::Note(text) => format!("<note>{}</note>", self.escape_xml(text)),
+            Node::Head(_) => String::new(),
             Node::CompoundJoin => " ".to_string(), // Space in diplomatic
             Node::LineBreak(_) | Node::PageBreak(_) => String::new(),
             _ => String::new(),
@@ -699,14 +705,13 @@ impl<'a> Compiler<'a> {
                 let normalized = self.normalize_text(text);
                 format!("<unclear>{}</unclear>", self.escape_xml(&normalized))
             }
-            //Same as above, Clippy is unhappy.
             Node::Gap { supplied, .. } => {
-                match supplied {
-                    Some(text) => {
-                        let normalized = self.normalize_text(text);
-                        format!("<supplied>{}</supplied>", self.escape_xml(&normalized))
-                    }
-                    None => String::new(),
+                let text = supplied.clone().unwrap_or_default();
+                if text.is_empty() {
+                    String::new()
+                } else {
+                    let normalized = self.normalize_text(&text);
+                    format!("<supplied>{}</supplied>", self.escape_xml(&normalized))
                 }
             }
             Node::Supplied(text) => {
@@ -725,7 +730,8 @@ impl<'a> Compiler<'a> {
                 let normalized = self.normalize_text(text);
                 format!("<note>{}</note>", self.escape_xml(&normalized))
             }
-            Node::CompoundJoin => String::new(), // Join parts in normalized (no space)
+            Node::Head(_) => String::new(),
+            Node::CompoundJoin => String::new(),
             Node::LineBreak(_) | Node::PageBreak(_) => String::new(),
             _ => String::new(),
         }

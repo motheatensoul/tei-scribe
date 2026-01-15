@@ -24,6 +24,8 @@ pub enum Node {
     Addition(String),
     /// Note: ^{text}
     Note(String),
+    /// Heading: .head{text}
+    Head(String),
     /// Unclear reading: ?{text}?
     Unclear(String),
     /// Custom entity: :name:
