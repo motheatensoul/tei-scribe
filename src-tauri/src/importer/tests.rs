@@ -34,6 +34,27 @@ fn test_import_choice() {
 }
 
 #[test]
+fn test_import_menota_am_ex_abbreviation() {
+    let xml = "<body xmlns:me=\"http://www.menota.org/ns/1.0\"><w><choice><me:facs>kn<am>¯</am>gr</me:facs><me:dipl>k<ex>ono</ex>ngr</me:dipl><me:norm>konungr</me:norm></choice></w></body>";
+    let result = parse(xml).unwrap();
+    assert_eq!(result.dsl, ".abbr[kn¯gr]{konongr}");
+}
+
+#[test]
+fn test_import_norm_only_punctuation() {
+    let xml = "<body xmlns:me=\"http://www.menota.org/ns/1.0\"><pc><choice><me:norm>,</me:norm></choice></pc></body>";
+    let result = parse(xml).unwrap();
+    assert_eq!(result.dsl, ".norm{,}");
+}
+
+#[test]
+fn test_import_supplied_block() {
+    let xml = "<body><supplied><p>Missing text</p></supplied></body>";
+    let result = parse(xml).unwrap();
+    assert!(result.dsl.contains(".supplied{Missing text}"));
+}
+
+#[test]
 fn test_import_gap() {
     let xml = "<body>start <gap/> end</body>";
     let result = parse(xml).unwrap();

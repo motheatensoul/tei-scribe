@@ -73,59 +73,62 @@ impl Extractor {
                         segments.push(self.extract_inline_element(node, &dsl));
                     }
                     "supplied" => {
-                        if self.has_element_children(node) {
-                            self.emit_structural(node, segments);
+                        let mut content = String::new();
+                        let mut dummy = false;
+                        if Self::has_element_children(node) {
+                            Self::node_to_dsl_with_options(node, &mut content, &mut dummy, false);
+                            let trimmed = content.trim();
+                            if !trimmed.is_empty() {
+                                let dsl = format!(".supplied{{{}}}", trimmed);
+                                segments.push(self.extract_inline_element(node, &dsl));
+                            } else {
+                                self.emit_structural(node, segments);
+                            }
                         } else {
-                            let mut content = String::new();
-                            let mut dummy = false;
                             Self::node_to_dsl(node, &mut content, &mut dummy);
                             let trimmed = content.trim();
                             if !trimmed.is_empty() {
                                 let dsl = format!("<{}>", trimmed);
                                 segments.push(self.extract_inline_element(node, &dsl));
+                            } else {
+                                self.emit_structural(node, segments);
                             }
                         }
                     }
                     "del" => {
-                        if self.has_element_children(node) {
-                            self.emit_structural(node, segments);
+                        let mut content = String::new();
+                        let mut dummy = false;
+                        Self::node_to_dsl(node, &mut content, &mut dummy);
+                        let trimmed = content.trim();
+                        if !trimmed.is_empty() {
+                            let dsl = format!("-{{{}}}-", trimmed);
+                            segments.push(self.extract_inline_element(node, &dsl));
                         } else {
-                            let mut content = String::new();
-                            let mut dummy = false;
-                            Self::node_to_dsl(node, &mut content, &mut dummy);
-                            let trimmed = content.trim();
-                            if !trimmed.is_empty() {
-                                let dsl = format!("-{{{}}}-", trimmed);
-                                segments.push(self.extract_inline_element(node, &dsl));
-                            }
+                            self.emit_structural(node, segments);
                         }
                     }
                     "add" => {
-                        if self.has_element_children(node) {
-                            self.emit_structural(node, segments);
+                        let mut content = String::new();
+                        let mut dummy = false;
+                        Self::node_to_dsl(node, &mut content, &mut dummy);
+                        let trimmed = content.trim();
+                        if !trimmed.is_empty() {
+                            let dsl = format!("+{{{}}}+", trimmed);
+                            segments.push(self.extract_inline_element(node, &dsl));
                         } else {
-                            let mut content = String::new();
-                            let mut dummy = false;
-                            Self::node_to_dsl(node, &mut content, &mut dummy);
-                            let trimmed = content.trim();
-                            if !trimmed.is_empty() {
-                                let dsl = format!("+{{{}}}+", trimmed);
-                                segments.push(self.extract_inline_element(node, &dsl));
-                            }
+                            self.emit_structural(node, segments);
                         }
                     }
                     "unclear" => {
-                        if self.has_element_children(node) {
-                            self.emit_structural(node, segments);
+                        let mut content = String::new();
+                        let mut dummy = false;
+                        Self::node_to_dsl(node, &mut content, &mut dummy);
+                        let trimmed = content.trim();
+                        if !trimmed.is_empty() {
+                            let dsl = format!("?{{{}}}?", trimmed);
+                            segments.push(self.extract_inline_element(node, &dsl));
                         } else {
-                            let mut content = String::new();
-                            let mut dummy = false;
-                            Self::node_to_dsl(node, &mut content, &mut dummy);
-                            let trimmed = content.trim();
-                            if !trimmed.is_empty() {
-                                let dsl = format!("?{{{}}}?", trimmed);
-                                segments.push(self.extract_inline_element(node, &dsl));
-                            }
+                            self.emit_structural(node, segments);
                         }
                     }
                     "note" => {
@@ -140,7 +143,7 @@ impl Extractor {
                         }
                     }
                     "am" => {
-                        if self.has_element_children(node) {
+                        if Self::has_element_children(node) {
                             self.emit_structural(node, segments);
                         } else {
                             // Abbreviation marker - keep raw content (entities handled in node_to_dsl)
@@ -272,7 +275,7 @@ impl Extractor {
         });
     }
 
-    fn has_element_children(&self, node: &Node) -> bool {
+    fn has_element_children(node: &Node) -> bool {
         let mut child = node.get_first_child();
         while let Some(c) = child {
             if c.get_type() == Some(NodeType::ElementNode) {
@@ -302,20 +305,6 @@ impl Extractor {
 
     fn extract_attributes(&self, node: &Node) -> HashMap<String, String> {
         helpers::attributes_with_ns(node).into_iter().collect()
-    }
-
-    fn menota_choice_text(node: &Node, has_inline_lb: &mut bool) -> Option<String> {
-        for level in ["facs", "dipl", "norm"] {
-            if let Some(child) = Self::find_descendant(node, level) {
-                let mut text = String::new();
-                Self::node_to_dsl(&child, &mut text, has_inline_lb);
-                let trimmed = text.trim();
-                if !trimmed.is_empty() {
-                    return Some(trimmed.to_string());
-                }
-            }
-        }
-        None
     }
 
     fn gap_dsl(node: &Node, supplied: Option<&str>) -> String {
@@ -358,12 +347,28 @@ impl Extractor {
         let mut dsl_content = String::new();
         let mut has_inline_lb = false;
 
-        if let Some(text) = Self::menota_choice_text(node, &mut has_inline_lb) {
-            dsl_content = text;
-        } else if let Some(facs) = facs_node {
-            Self::node_to_dsl(&facs, &mut dsl_content, &mut has_inline_lb);
+        if let Some((abbr, expan)) = Self::menota_abbr_expansion(node, &mut has_inline_lb) {
+            dsl_content = format!(".abbr[{}]{{{}}}", abbr, expan);
         } else {
-            Self::node_to_dsl(node, &mut dsl_content, &mut has_inline_lb);
+            let facs_text = Self::menota_level_text(node, "facs", &mut has_inline_lb);
+            let dipl_text = Self::menota_level_text(node, "dipl", &mut has_inline_lb);
+            let norm_text = Self::menota_level_text(node, "norm", &mut has_inline_lb);
+
+            if facs_text.is_none() && dipl_text.is_none() {
+                if let Some(text) = norm_text.clone() {
+                    dsl_content = format!(".norm{{{}}}", text);
+                }
+            }
+
+            if dsl_content.is_empty() {
+                if let Some(text) = facs_text.or(dipl_text).or(norm_text) {
+                    dsl_content = text;
+                } else if let Some(facs) = facs_node {
+                    Self::node_to_dsl(&facs, &mut dsl_content, &mut has_inline_lb);
+                } else {
+                    Self::node_to_dsl(node, &mut dsl_content, &mut has_inline_lb);
+                }
+            }
         }
 
         Segment::Word {
@@ -384,12 +389,24 @@ impl Extractor {
         let mut dsl_content = String::new();
         let mut has_inline_lb = false;
 
-        if let Some(text) = Self::menota_choice_text(node, &mut has_inline_lb) {
-            dsl_content = text;
-        } else if let Some(facs) = facs_node {
-            Self::node_to_dsl(&facs, &mut dsl_content, &mut has_inline_lb);
-        } else {
-            Self::node_to_dsl(node, &mut dsl_content, &mut has_inline_lb);
+        let facs_text = Self::menota_level_text(node, "facs", &mut has_inline_lb);
+        let dipl_text = Self::menota_level_text(node, "dipl", &mut has_inline_lb);
+        let norm_text = Self::menota_level_text(node, "norm", &mut has_inline_lb);
+
+        if facs_text.is_none() && dipl_text.is_none() {
+            if let Some(text) = norm_text.clone() {
+                dsl_content = format!(".norm{{{}}}", text);
+            }
+        }
+
+        if dsl_content.is_empty() {
+            if let Some(text) = facs_text.or(dipl_text).or(norm_text) {
+                dsl_content = text;
+            } else if let Some(facs) = facs_node {
+                Self::node_to_dsl(&facs, &mut dsl_content, &mut has_inline_lb);
+            } else {
+                Self::node_to_dsl(node, &mut dsl_content, &mut has_inline_lb);
+            }
         }
 
         Segment::Punctuation {
@@ -440,15 +457,30 @@ impl Extractor {
         if found_abbr && found_expan {
             // Abbreviation pattern: .abbr[abbr]{expan}
             dsl_content = format!(".abbr[{}]{{{}}}", abbr_text, expan_text);
-        } else if let Some(text) = Self::menota_choice_text(node, &mut has_inline_lb) {
-            // MENOTA multi-level pattern: prefer facs, then dipl, then norm
-            dsl_content = text;
-        } else if let Some(facs) = facs_node {
-            // Fallback: extract from facs if available
-            Self::node_to_dsl(&facs, &mut dsl_content, &mut has_inline_lb);
+        } else if let Some((abbr, expan)) = Self::menota_abbr_expansion(node, &mut has_inline_lb) {
+            dsl_content = format!(".abbr[{}]{{{}}}", abbr, expan);
         } else {
-            // Fallback: process all children
-            Self::node_to_dsl(node, &mut dsl_content, &mut has_inline_lb);
+            let facs_text = Self::menota_level_text(node, "facs", &mut has_inline_lb);
+            let dipl_text = Self::menota_level_text(node, "dipl", &mut has_inline_lb);
+            let norm_text = Self::menota_level_text(node, "norm", &mut has_inline_lb);
+
+            if facs_text.is_none() && dipl_text.is_none() {
+                if let Some(text) = norm_text.clone() {
+                    dsl_content = format!(".norm{{{}}}", text);
+                }
+            }
+
+            if dsl_content.is_empty() {
+                if let Some(text) = facs_text.or(dipl_text).or(norm_text) {
+                    dsl_content = text;
+                } else if let Some(facs) = facs_node {
+                    // Fallback: extract from facs if available
+                    Self::node_to_dsl(&facs, &mut dsl_content, &mut has_inline_lb);
+                } else {
+                    // Fallback: process all children
+                    Self::node_to_dsl(node, &mut dsl_content, &mut has_inline_lb);
+                }
+            }
         }
 
         Segment::Word {
@@ -460,7 +492,74 @@ impl Extractor {
         }
     }
 
+    fn node_children_to_dsl_with_options(
+        node: &Node,
+        output: &mut String,
+        has_inline_lb: &mut bool,
+        allow_norm_wrapper: bool,
+    ) {
+        let mut child = node.get_first_child();
+        while let Some(c) = child {
+            Self::node_to_dsl_with_options(&c, output, has_inline_lb, allow_norm_wrapper);
+            child = c.get_next_sibling();
+        }
+    }
+
+    fn menota_level_text(
+        node: &Node,
+        level: &str,
+        has_inline_lb: &mut bool,
+    ) -> Option<String> {
+        Self::find_descendant(node, level).and_then(|child| {
+            let mut text = String::new();
+            Self::node_to_dsl(&child, &mut text, has_inline_lb);
+            let trimmed = text.trim();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed.to_string())
+            }
+        })
+    }
+
+    fn menota_abbr_expansion(
+        node: &Node,
+        has_inline_lb: &mut bool,
+    ) -> Option<(String, String)> {
+        let facs_node = Self::find_descendant(node, "facs")?;
+        let dipl_node = Self::find_descendant(node, "dipl")?;
+        let has_am = Self::find_descendant(&facs_node, "am").is_some();
+        let has_ex = Self::find_descendant(&dipl_node, "ex").is_some();
+
+        if !has_am && !has_ex {
+            return None;
+        }
+
+        let mut abbr = String::new();
+        Self::node_to_dsl(&facs_node, &mut abbr, has_inline_lb);
+        let mut expan = String::new();
+        Self::node_to_dsl(&dipl_node, &mut expan, has_inline_lb);
+
+        let abbr = abbr.trim();
+        let expan = expan.trim();
+
+        if abbr.is_empty() || expan.is_empty() {
+            None
+        } else {
+            Some((abbr.to_string(), expan.to_string()))
+        }
+    }
+
     fn node_to_dsl(node: &Node, output: &mut String, has_inline_lb: &mut bool) {
+        Self::node_to_dsl_with_options(node, output, has_inline_lb, true);
+    }
+
+    fn node_to_dsl_with_options(
+        node: &Node,
+        output: &mut String,
+        has_inline_lb: &mut bool,
+        allow_norm_wrapper: bool,
+    ) {
         let mut child = node.get_first_child();
         while let Some(c) = child {
             let mut next_child = c.get_next_sibling();
@@ -522,10 +621,20 @@ impl Extractor {
                                     let gc_name = helpers::local_name(&gcc);
                                     if gc_name == "abbr" {
                                         found_abbr = true;
-                                        Self::node_to_dsl(&gcc, &mut abbr_text, has_inline_lb);
+                                        Self::node_to_dsl_with_options(
+                                            &gcc,
+                                            &mut abbr_text,
+                                            has_inline_lb,
+                                            allow_norm_wrapper,
+                                        );
                                     } else if gc_name == "expan" {
                                         found_expan = true;
-                                        Self::node_to_dsl(&gcc, &mut expan_text, has_inline_lb);
+                                        Self::node_to_dsl_with_options(
+                                            &gcc,
+                                            &mut expan_text,
+                                            has_inline_lb,
+                                            allow_norm_wrapper,
+                                        );
                                     } else if gc_name == "facs" {
                                         facs_node = Some(gcc.clone());
                                     }
@@ -535,34 +644,185 @@ impl Extractor {
 
                             if found_abbr && found_expan {
                                 output.push_str(&format!(".abbr[{}]{{{}}}", abbr_text, expan_text));
-                            } else if let Some(text) = Self::menota_choice_text(&c, has_inline_lb) {
-                                output.push_str(&text);
-                            } else if let Some(facs) = facs_node {
-                                Self::node_to_dsl(&facs, output, has_inline_lb);
+                            } else if let Some((abbr, expan)) =
+                                Self::menota_abbr_expansion(&c, has_inline_lb)
+                            {
+                                output.push_str(&format!(".abbr[{}]{{{}}}", abbr, expan));
                             } else {
-                                let mut gc = c.get_first_child();
-                                while let Some(gcc) = gc {
-                                    if gcc.get_type() == Some(NodeType::ElementNode) {
-                                        let gc_name = helpers::local_name(&gcc);
-                                        if gc_name == "dipl" || gc_name == "norm" {
+                                let mut handled = false;
+                                let facs_text = Self::menota_level_text(&c, "facs", has_inline_lb);
+                                let dipl_text = Self::menota_level_text(&c, "dipl", has_inline_lb);
+                                let norm_text = Self::menota_level_text(&c, "norm", has_inline_lb);
+
+                                if facs_text.is_none() && dipl_text.is_none() {
+                                    if let Some(text) = norm_text.as_ref() {
+                                        if allow_norm_wrapper {
+                                            output.push_str(&format!(".norm{{{}}}", text));
+                                        } else {
+                                            output.push_str(text);
+                                        }
+                                        handled = true;
+                                    }
+                                }
+
+                                if !handled {
+                                    if let Some(text) = facs_text
+                                        .as_ref()
+                                        .or(dipl_text.as_ref())
+                                        .or(norm_text.as_ref())
+                                    {
+                                        output.push_str(text);
+                                        handled = true;
+                                    }
+                                }
+
+                                if !handled {
+                                    if let Some(facs) = facs_node {
+                                        Self::node_to_dsl_with_options(
+                                            &facs,
+                                            output,
+                                            has_inline_lb,
+                                            allow_norm_wrapper,
+                                        );
+                                    } else {
+                                        let mut gc = c.get_first_child();
+                                        while let Some(gcc) = gc {
+                                            if gcc.get_type() == Some(NodeType::ElementNode) {
+                                                let gc_name = helpers::local_name(&gcc);
+                                                if gc_name == "dipl" || gc_name == "norm" {
+                                                    gc = gcc.get_next_sibling();
+                                                    continue;
+                                                }
+                                            }
+                                            Self::node_to_dsl_with_options(
+                                                &gcc,
+                                                output,
+                                                has_inline_lb,
+                                                allow_norm_wrapper,
+                                            );
                                             gc = gcc.get_next_sibling();
-                                            continue;
                                         }
                                     }
-                                    Self::node_to_dsl(&gcc, output, has_inline_lb);
-                                    gc = gcc.get_next_sibling();
                                 }
                             }
                         }
                         "am" => {
-                            Self::node_to_dsl(&c, output, has_inline_lb);
+                            Self::node_to_dsl_with_options(
+                                &c,
+                                output,
+                                has_inline_lb,
+                                allow_norm_wrapper,
+                            );
+                        }
+                        "w" => {
+                            if !output.is_empty() && !output.ends_with(' ') {
+                                output.push(' ');
+                            }
+
+                            if let Some((abbr, expan)) =
+                                Self::menota_abbr_expansion(&c, has_inline_lb)
+                            {
+                                output.push_str(&format!(".abbr[{}]{{{}}}", abbr, expan));
+                            } else {
+                                let facs_text =
+                                    Self::menota_level_text(&c, "facs", has_inline_lb);
+                                let dipl_text =
+                                    Self::menota_level_text(&c, "dipl", has_inline_lb);
+                                let norm_text =
+                                    Self::menota_level_text(&c, "norm", has_inline_lb);
+                                let mut handled = false;
+
+                                if facs_text.is_none() && dipl_text.is_none() {
+                                    if let Some(text) = norm_text.as_ref() {
+                                        if allow_norm_wrapper {
+                                            output.push_str(&format!(".norm{{{}}}", text));
+                                        } else {
+                                            output.push_str(text);
+                                        }
+                                        handled = true;
+                                    }
+                                }
+
+                                if !handled {
+                                    if let Some(text) = facs_text
+                                        .as_ref()
+                                        .or(dipl_text.as_ref())
+                                        .or(norm_text.as_ref())
+                                    {
+                                        output.push_str(text);
+                                        handled = true;
+                                    }
+                                }
+
+                                if !handled {
+                                    Self::node_children_to_dsl_with_options(
+                                        &c,
+                                        output,
+                                        has_inline_lb,
+                                        allow_norm_wrapper,
+                                    );
+                                }
+                            }
+                        }
+                        "pc" => {
+                            let facs_text = Self::menota_level_text(&c, "facs", has_inline_lb);
+                            let dipl_text = Self::menota_level_text(&c, "dipl", has_inline_lb);
+                            let norm_text = Self::menota_level_text(&c, "norm", has_inline_lb);
+                            let mut handled = false;
+
+                            if facs_text.is_none() && dipl_text.is_none() {
+                                if let Some(text) = norm_text.as_ref() {
+                                    if allow_norm_wrapper {
+                                        output.push_str(&format!(".norm{{{}}}", text));
+                                    } else {
+                                        output.push_str(text);
+                                    }
+                                    handled = true;
+                                }
+                            }
+
+                            if !handled {
+                                if let Some(text) = facs_text
+                                    .as_ref()
+                                    .or(dipl_text.as_ref())
+                                    .or(norm_text.as_ref())
+                                {
+                                    output.push_str(text);
+                                    handled = true;
+                                }
+                            }
+
+                            if !handled {
+                                Self::node_children_to_dsl_with_options(
+                                    &c,
+                                    output,
+                                    has_inline_lb,
+                                    allow_norm_wrapper,
+                                );
+                            }
                         }
                         "c" => {
-                            output.push_str(&c.get_content());
+                            let mut inner = String::new();
+                            Self::node_to_dsl_with_options(
+                                &c,
+                                &mut inner,
+                                has_inline_lb,
+                                allow_norm_wrapper,
+                            );
+                            if inner.is_empty() {
+                                output.push_str(&c.get_content());
+                            } else {
+                                output.push_str(&inner);
+                            }
                         }
                         "add" => {
                             let mut inner = String::new();
-                            Self::node_to_dsl(&c, &mut inner, has_inline_lb);
+                            Self::node_to_dsl_with_options(
+                                &c,
+                                &mut inner,
+                                has_inline_lb,
+                                allow_norm_wrapper,
+                            );
                             let trimmed = inner.trim();
                             if !trimmed.is_empty() {
                                 output.push_str("+{");
@@ -572,7 +832,12 @@ impl Extractor {
                         }
                         "del" => {
                             let mut inner = String::new();
-                            Self::node_to_dsl(&c, &mut inner, has_inline_lb);
+                            Self::node_to_dsl_with_options(
+                                &c,
+                                &mut inner,
+                                has_inline_lb,
+                                allow_norm_wrapper,
+                            );
                             let trimmed = inner.trim();
                             if !trimmed.is_empty() {
                                 output.push_str("-{");
@@ -582,7 +847,12 @@ impl Extractor {
                         }
                         "unclear" => {
                             let mut inner = String::new();
-                            Self::node_to_dsl(&c, &mut inner, has_inline_lb);
+                            Self::node_to_dsl_with_options(
+                                &c,
+                                &mut inner,
+                                has_inline_lb,
+                                allow_norm_wrapper,
+                            );
                             let trimmed = inner.trim();
                             if !trimmed.is_empty() {
                                 output.push_str("?{");
@@ -591,13 +861,32 @@ impl Extractor {
                             }
                         }
                         "supplied" => {
+                            let has_children = Self::has_element_children(&c);
                             let mut inner = String::new();
-                            Self::node_to_dsl(&c, &mut inner, has_inline_lb);
+                            if has_children {
+                                Self::node_to_dsl_with_options(
+                                    &c,
+                                    &mut inner,
+                                    has_inline_lb,
+                                    false,
+                                );
+                            } else {
+                                Self::node_children_to_dsl_with_options(
+                                    &c,
+                                    &mut inner,
+                                    has_inline_lb,
+                                    allow_norm_wrapper,
+                                );
+                            }
                             let trimmed = inner.trim();
                             if !trimmed.is_empty() {
-                                output.push('<');
-                                output.push_str(trimmed);
-                                output.push('>');
+                                if has_children {
+                                    output.push_str(&format!(".supplied{{{}}}", trimmed));
+                                } else {
+                                    output.push('<');
+                                    output.push_str(trimmed);
+                                    output.push('>');
+                                }
                             }
                         }
                         "gap" => {
@@ -607,7 +896,12 @@ impl Extractor {
                                     && helpers::local_name(&next) == "supplied"
                                 {
                                     let mut inner = String::new();
-                                    Self::node_to_dsl(&next, &mut inner, has_inline_lb);
+                                    Self::node_to_dsl_with_options(
+                                        &next,
+                                        &mut inner,
+                                        has_inline_lb,
+                                        allow_norm_wrapper,
+                                    );
                                     let trimmed = inner.trim();
                                     if !trimmed.is_empty() {
                                         supplied_text = Some(trimmed.to_string());
@@ -619,7 +913,12 @@ impl Extractor {
                         }
                         "note" => {
                             let mut inner = String::new();
-                            Self::node_to_dsl(&c, &mut inner, has_inline_lb);
+                            Self::node_to_dsl_with_options(
+                                &c,
+                                &mut inner,
+                                has_inline_lb,
+                                allow_norm_wrapper,
+                            );
                             let trimmed = inner.trim();
                             if !trimmed.is_empty() {
                                 output.push_str("^{");
@@ -638,7 +937,12 @@ impl Extractor {
                             // Skip
                         }
                         _ => {
-                            Self::node_to_dsl(&c, output, has_inline_lb);
+                            Self::node_to_dsl_with_options(
+                                &c,
+                                output,
+                                has_inline_lb,
+                                allow_norm_wrapper,
+                            );
                         }
                     }
                 }

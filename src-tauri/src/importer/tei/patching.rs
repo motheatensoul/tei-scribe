@@ -102,7 +102,9 @@ fn parse_dsl_to_tokens(dsl: &str) -> Vec<TokenInfo> {
             | Node::Punctuation(_)
             | Node::LineBreak(_)
             | Node::PageBreak(_)
-            | Node::Head(_) => Some(TokenInfo {
+            | Node::Head(_)
+            | Node::SuppliedBlock(_)
+            | Node::Norm(_) => Some(TokenInfo {
                 content: node_to_dsl(&node),
                 segment_id: None,
             }),
@@ -137,6 +139,8 @@ fn node_to_dsl(node: &Node) -> String {
             s
         }
         Node::Supplied(t) => format!("<{}>", t),
+        Node::SuppliedBlock(t) => format!(".supplied{{{}}}", t),
+        Node::Norm(t) => format!(".norm{{{}}}", t),
         Node::Deletion(t) => format!("-{{{}}}-", t),
         Node::Addition(t) => format!("+{{{}}}+", t),
         Node::Note(t) => format!("^{{{}}}", t),

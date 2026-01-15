@@ -44,11 +44,29 @@ impl<'a> Lexer<'a> {
                 continue;
             }
 
+            // Supplied block: .supplied{text}
+            if remaining.starts_with(".supplied{") {
+                self.flush_text(&mut doc, &mut text_buf);
+                self.pos += 10;
+                let text = self.consume_braced_block()?;
+                doc.push(Node::SuppliedBlock(text));
+                continue;
+            }
+
+            // Normalized-only wrapper: .norm{text}
+            if remaining.starts_with(".norm{") {
+                self.flush_text(&mut doc, &mut text_buf);
+                self.pos += 6;
+                let text = self.consume_braced_block()?;
+                doc.push(Node::Norm(text));
+                continue;
+            }
+
             // Heading: .head{text}
             if remaining.starts_with(".head{") {
                 self.flush_text(&mut doc, &mut text_buf);
                 self.pos += 6;
-                let text = self.consume_head_bracketed()?;
+                let text = self.consume_braced_block()?;
                 doc.push(Node::Head(text));
                 continue;
             }
@@ -254,7 +272,7 @@ impl<'a> Lexer<'a> {
         Err(format!("Unclosed bracket, expected '{}'", end))
     }
 
-    fn consume_head_bracketed(&mut self) -> Result<String, String> {
+    fn consume_braced_block(&mut self) -> Result<String, String> {
         let start = self.pos;
         let mut depth = 1;
         while self.pos < self.input.len() {

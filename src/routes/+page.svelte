@@ -122,6 +122,22 @@
     function extractMenotaText(xml: string, tagName: string): string | null {
         return extractTagText(xml, `me:${tagName}`) ?? extractTagText(xml, tagName);
     }
+
+    function countWordElements(xml: string): number {
+        if (!xml) return 0;
+        const matches = xml.match(/<w(?=[\s>])/g);
+        return matches ? matches.length : 0;
+    }
+
+    function countDslWords(dsl: string): number {
+        const headMatch = dsl.match(/^\s*\.head\{([\s\S]*)\}\s*$/);
+        const content = headMatch ? headMatch[1] : dsl;
+        const withoutKeywords = content.replace(/\.(head|abbr|supplied|norm)\b/g, " ");
+        const withoutEntities = withoutKeywords.replace(/:([^\s:]+):/g, "$1");
+        const normalized = withoutEntities.replace(/[<>{}\[\]+\-\?\^]/g, " ");
+        const tokens = normalized.match(/[\p{L}\p{N}]+/gu);
+        return tokens ? tokens.length : 0;
+    }
     onMount(async () => {
         errorStore.info("App", "Application starting...");
 
@@ -1052,10 +1068,21 @@
                     { lemma: string; msa: string; normalized?: string }
                 > = {};
                 const inflectionMap = new Map<string, InflectedForm>();
+                const isMenotaImport = result.importedDocument.is_menota ?? false;
+                let missingLemmaCount = 0;
+                let missingNormalizedCount = 0;
                 let wordIndex = 0;
 
                 for (const segment of result.importedDocument.segments) {
-                    if (segment.type !== "Word") {
+                    if (!("has_inline_lb" in segment)) {
+                        continue;
+                    }
+                    const isHead = segment.dsl_content.startsWith(".head{");
+                    if (isHead) {
+                        const headWordCount =
+                            countWordElements(segment.original_xml) ||
+                            countDslWords(segment.dsl_content);
+                        wordIndex += headWordCount;
                         continue;
                     }
                     const lemma = segment.attributes.lemma;
@@ -1065,6 +1092,21 @@
                         segment.original_xml,
                         "norm",
                     );
+                    const isWordElement =
+                        segment.original_xml.trimStart().startsWith("<w");
+
+                    if (!isWordElement) {
+                        continue;
+                    }
+
+                    if (isMenotaImport) {
+                        if (!lemma) {
+                            missingLemmaCount += 1;
+                        }
+                        if (!normalized) {
+                            missingNormalizedCount += 1;
+                        }
+                    }
 
                     if (lemma && msa) {
                         lemmaConfirmations[wordIndex] = {
@@ -1101,6 +1143,21 @@
                     }
 
                     wordIndex += 1;
+                }
+
+                if (isMenotaImport) {
+                    if (missingLemmaCount > 0) {
+                        errorStore.warning(
+                            "Import",
+                            `Missing lemma for ${missingLemmaCount} word(s); left empty.`,
+                        );
+                    }
+                    if (missingNormalizedCount > 0) {
+                        errorStore.warning(
+                            "Import",
+                            `Missing normalized form for ${missingNormalizedCount} word(s).`,
+                        );
+                    }
                 }
 
                 if (Object.keys(lemmaConfirmations).length > 0) {

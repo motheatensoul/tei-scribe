@@ -68,7 +68,7 @@ impl WordTokenizer {
                     }
                 }
 
-                Node::Head(_) => {
+                Node::Head(_) | Node::SuppliedBlock(_) | Node::Norm(_) => {
                     if !current_word.is_empty() {
                         result.push(Node::Word(std::mem::take(&mut current_word)));
                     }

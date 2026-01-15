@@ -1,6 +1,6 @@
 <script lang="ts">
     import { onMount, onDestroy } from 'svelte';
-    import { EditorView, keymap, lineNumbers, highlightActiveLineGutter, type Command } from '@codemirror/view';
+    import { EditorView, keymap, lineNumbers, highlightActiveLineGutter, type Command, type KeyBinding } from '@codemirror/view';
     import { EditorState } from '@codemirror/state';
     import { defaultKeymap, history, historyKeymap, undo, redo } from '@codemirror/commands';
     import { search, searchKeymap, openSearchPanel, closeSearchPanel, searchPanelOpen } from '@codemirror/search';
@@ -20,6 +20,13 @@
     const redoCommand = redo as unknown as Command;
 
     onMount(() => {
+        const bindings = [
+            ...defaultKeymap,
+            ...historyKeymap,
+            ...searchKeymap,
+            ...foldKeymap,
+        ] as unknown as KeyBinding[];
+
         const startState = EditorState.create({
             doc: $editor.content,
             extensions: [
@@ -27,7 +34,7 @@
                 highlightActiveLineGutter(),
                 foldGutter(),
                 history(),
-                keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap, ...foldKeymap]),
+                keymap.of(bindings),
                 search({ top: true }),
                 teiDsl,
                 teiDslHighlighting,

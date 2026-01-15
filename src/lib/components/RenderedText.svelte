@@ -277,6 +277,57 @@
         });
     }
 
+    function normalizeWhitespace(text: string): string {
+        return text.replace(/\s+/g, ' ').trim();
+    }
+
+    function collectWordParts(
+        element: Element,
+        placeholderGlyphs: Map<string, string>
+    ): Array<{ text: string; lineNumber?: string }> {
+        const parts: Array<{ text: string; lineNumber?: string }> = [];
+        let buffer = '';
+
+        const flush = (lineNumber?: string) => {
+            const normalized = normalizeWhitespace(buffer);
+            if (normalized) {
+                parts.push({
+                    text: resolveEntitiesToGlyphs(normalized, placeholderGlyphs),
+                    lineNumber,
+                });
+            } else if (lineNumber) {
+                parts.push({ text: '', lineNumber });
+            }
+            buffer = '';
+        };
+
+        const walk = (node: Node) => {
+            for (const child of node.childNodes) {
+                if (child.nodeType === Node.TEXT_NODE) {
+                    buffer += child.textContent ?? '';
+                    continue;
+                }
+
+                if (child.nodeType !== Node.ELEMENT_NODE) {
+                    continue;
+                }
+
+                const el = child as Element;
+                if (el.localName === 'lb') {
+                    flush(el.getAttribute('n') ?? undefined);
+                    continue;
+                }
+
+                walk(el);
+            }
+        };
+
+        walk(element);
+        flush();
+
+        return parts;
+    }
+
     // Async version of extractTokens that yields periodically
     async function extractTokensAsync(
         node: Node,
@@ -309,16 +360,59 @@
                     case 'w': {
                         const facsEl = el.querySelector('me\\:facs, facs');
                         const diplEl = el.querySelector('me\\:dipl, dipl');
-                        const facsRaw = facsEl?.textContent || el.textContent || '';
-                        const diplRaw = diplEl?.textContent || facsRaw;
-                        const displayText = resolveEntitiesToGlyphs(facsRaw, placeholderGlyphs).trim();
-                        const diplomatic = resolveEntitiesToGlyphs(diplRaw, placeholderGlyphs).trim();
                         const wordIndex = wordCounter.index;
                         wordCounter.index++;
 
-                        if (displayText) {
-                            result.push({ type: 'word', displayText, diplomatic, wordIndex });
-                            result.push({ type: 'space', displayText: ' ' });
+                        let parts = facsEl ? collectWordParts(facsEl, placeholderGlyphs) : [];
+                        if (!parts.some(part => part.text || part.lineNumber)) {
+                            parts = diplEl ? collectWordParts(diplEl, placeholderGlyphs) : [];
+                        }
+                        if (!parts.some(part => part.text || part.lineNumber)) {
+                            parts = collectWordParts(el, placeholderGlyphs);
+                        }
+
+                        const diplomatic = normalizeWhitespace(
+                            resolveEntitiesToGlyphs(
+                                diplEl?.textContent || facsEl?.textContent || el.textContent || '',
+                                placeholderGlyphs,
+                            ),
+                        );
+                        const lastTextIndex = parts.reduce(
+                            (last, part, index) => (part.text ? index : last),
+                            -1,
+                        );
+
+                        if (lastTextIndex >= 0) {
+                            parts.forEach((part, index) => {
+                                if (part.text) {
+                                    result.push({
+                                        type: 'word',
+                                        displayText: part.text,
+                                        diplomatic,
+                                        wordIndex,
+                                    });
+                                }
+                                if (part.lineNumber) {
+                                    result.push({
+                                        type: 'linebreak',
+                                        displayText: '',
+                                        lineNumber: part.lineNumber,
+                                    });
+                                }
+                                if (part.text && index === lastTextIndex) {
+                                    result.push({ type: 'space', displayText: ' ' });
+                                }
+                            });
+                        } else {
+                            parts.forEach((part) => {
+                                if (part.lineNumber) {
+                                    result.push({
+                                        type: 'linebreak',
+                                        displayText: '',
+                                        lineNumber: part.lineNumber,
+                                    });
+                                }
+                            });
                         }
                         break;
                     }
@@ -348,8 +442,12 @@
                         break;
                     }
                     case 'supplied': {
-                        const text = resolveEntitiesToGlyphs(el.textContent || '', placeholderGlyphs);
-                        result.push({ type: 'text', displayText: `⟨${text}⟩` });
+                        const text = normalizeWhitespace(
+                            resolveEntitiesToGlyphs(el.textContent || '', placeholderGlyphs),
+                        );
+                        if (text) {
+                            result.push({ type: 'text', displayText: `⟨${text}⟩` });
+                        }
                         break;
                     }
                     case 'unclear': {

@@ -163,6 +163,10 @@ impl<'a> Compiler<'a> {
                 }
             }
             Node::Supplied(text) => format!("<supplied>{}</supplied>", self.escape_xml(text)),
+            Node::SuppliedBlock(text) => {
+                let content = self.compile_fragment_from_dsl(text);
+                format!("<supplied>{}</supplied>", content)
+            }
             Node::Deletion(text) => format!("<del>{}</del>", self.escape_xml(text)),
             Node::Addition(text) => format!("<add>{}</add>", self.escape_xml(text)),
             Node::Note(text) => format!("<note>{}</note>", self.escape_xml(text)),
@@ -170,6 +174,7 @@ impl<'a> Compiler<'a> {
                 let content = self.compile_fragment_from_dsl(text);
                 format!("<head>{}</head>", content)
             }
+            Node::Norm(text) => self.compile_normalized_fragment(text),
             Node::Unclear(text) => format!("<unclear>{}</unclear>", self.escape_xml(text)),
             Node::Entity(name) => self.compile_entity(name),
             Node::WordContinuation => String::new(), // Consumed by word tokenizer
@@ -592,7 +597,7 @@ impl<'a> Compiler<'a> {
                     None => "<gap reason=\"illegible\"/>".to_string(),
                 }
             }
-            Node::Supplied(_) => String::new(), // Not shown in facsimile
+            Node::Supplied(_) | Node::SuppliedBlock(_) | Node::Norm(_) => String::new(),
             Node::Deletion(text) => format!("<del>{}</del>", self.escape_xml(text)),
             Node::Addition(text) => format!("<add>{}</add>", self.escape_xml(text)),
             Node::Note(text) => format!("<note>{}</note>", self.escape_xml(text)),
@@ -648,6 +653,7 @@ impl<'a> Compiler<'a> {
                 }
             }
             Node::Supplied(text) => format!("<supplied>{}</supplied>", self.escape_xml(text)),
+            Node::SuppliedBlock(_) | Node::Norm(_) => String::new(),
             Node::Deletion(text) => format!("<del>{}</del>", self.escape_xml(text)),
             Node::Addition(text) => format!("<add>{}</add>", self.escape_xml(text)),
             Node::Note(text) => format!("<note>{}</note>", self.escape_xml(text)),
@@ -718,6 +724,7 @@ impl<'a> Compiler<'a> {
                 let normalized = self.normalize_text(text);
                 format!("<supplied>{}</supplied>", self.escape_xml(&normalized))
             }
+            Node::SuppliedBlock(_) | Node::Norm(_) => String::new(),
             Node::Deletion(text) => {
                 let normalized = self.normalize_text(text);
                 format!("<del>{}</del>", self.escape_xml(&normalized))
@@ -833,6 +840,64 @@ impl<'a> Compiler<'a> {
 
         // Fallback: compile as plain punctuation
         format!("<pc>{}</pc>\n", self.escape_xml(dsl))
+    }
+
+    fn compile_normalized_fragment(&mut self, dsl: &str) -> String {
+        if !self.config.multi_level {
+            return String::new();
+        }
+
+        let mut lexer = Lexer::new(dsl);
+        let doc = match lexer.parse() {
+            Ok(d) => d,
+            Err(_) => return format!("<!-- parse error: {} -->", self.escape_xml(dsl)),
+        };
+
+        let tokenizer = WordTokenizer::new();
+        let nodes = tokenizer.tokenize(doc.nodes);
+
+        let mut output = String::new();
+        for node in &nodes {
+            match node {
+                Node::Word(children) => {
+                    let norm = self.nodes_to_normalized(children);
+                    if !norm.is_empty() {
+                        output.push_str(&format!(
+                            "<w>\n  <choice>\n    <me:facs></me:facs>\n    <me:dipl></me:dipl>\n    <me:norm>{}</me:norm>\n  </choice>\n</w>\n",
+                            norm
+                        ));
+                    }
+                }
+                Node::Punctuation(children) => {
+                    let norm = self.nodes_to_normalized(children);
+                    if !norm.is_empty() {
+                        output.push_str(&format!(
+                            "<pc>\n  <choice>\n    <me:facs></me:facs>\n    <me:dipl></me:dipl>\n    <me:norm>{}</me:norm>\n  </choice>\n</pc>\n",
+                            norm
+                        ));
+                    }
+                }
+                Node::LineBreak(n) => match n {
+                    Some(num) => output.push_str(&format!("<lb n=\"{}\"/>\n", self.escape_xml(num))),
+                    None => output.push_str("<lb/>\n"),
+                },
+                Node::PageBreak(n) => {
+                    output.push_str(&format!("<pb n=\"{}\"/>\n", self.escape_xml(n)));
+                }
+                Node::SuppliedBlock(text) => {
+                    let content = self.compile_normalized_fragment(text);
+                    output.push_str(&format!("<supplied>{}</supplied>", content));
+                }
+                Node::Norm(text) => {
+                    output.push_str(&self.compile_normalized_fragment(text));
+                }
+                _ => {
+                    output.push_str(&self.node_to_normalized(node));
+                }
+            }
+        }
+
+        output
     }
 
     /// Compile a DSL fragment (for insertions).

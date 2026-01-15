@@ -60,12 +60,12 @@ export async function loadTextFile(path: string): Promise<string> {
 /** Result from importing a file */
 export type Segment =
   | {
-      type: "Structural";
+      type: "structural";
       id: number;
       xml: string;
     }
   | {
-      type: "Word";
+      type: "word";
       id: number;
       original_xml: string;
       attributes: Record<string, string>;
@@ -73,28 +73,28 @@ export type Segment =
       has_inline_lb: boolean;
     }
   | {
-      type: "Punctuation";
+      type: "punctuation";
       id: number;
       original_xml: string;
       dsl_content: string;
     }
   | {
-      type: "LineBreak";
+      type: "line_break";
       id: number;
       attributes: Record<string, string>;
     }
   | {
-      type: "PageBreak";
+      type: "page_break";
       id: number;
       attributes: Record<string, string>;
     }
   | {
-      type: "HandShift";
+      type: "hand_shift";
       id: number;
       attributes: Record<string, string>;
     }
   | {
-      type: "Whitespace";
+      type: "whitespace";
       id: number;
       content: string;
     };
