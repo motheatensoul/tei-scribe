@@ -62,23 +62,31 @@ impl Extractor {
                         segments.push(self.extract_inline_element(node, "[...]"));
                     }
                     "supplied" => {
-                        let content = node.get_content();
-                        let dsl = format!("<{}>", content);
+                        let mut content = String::new();
+                        let mut dummy = false;
+                        Self::node_to_dsl(node, &mut content, &mut dummy);
+                        let dsl = format!("<{}>", content.trim());
                         segments.push(self.extract_inline_element(node, &dsl));
                     }
                     "del" => {
-                        let content = node.get_content();
-                        let dsl = format!("-{{{}}}-", content);
+                        let mut content = String::new();
+                        let mut dummy = false;
+                        Self::node_to_dsl(node, &mut content, &mut dummy);
+                        let dsl = format!("-{{{}}}-", content.trim());
                         segments.push(self.extract_inline_element(node, &dsl));
                     }
                     "add" => {
-                        let content = node.get_content();
-                        let dsl = format!("+{{{}}}+", content);
+                        let mut content = String::new();
+                        let mut dummy = false;
+                        Self::node_to_dsl(node, &mut content, &mut dummy);
+                        let dsl = format!("+{{{}}}+", content.trim());
                         segments.push(self.extract_inline_element(node, &dsl));
                     }
                     "unclear" => {
-                        let content = node.get_content();
-                        let dsl = format!("?{{{}}}?", content);
+                        let mut content = String::new();
+                        let mut dummy = false;
+                        Self::node_to_dsl(node, &mut content, &mut dummy);
+                        let dsl = format!("?{{{}}}?", content.trim());
                         segments.push(self.extract_inline_element(node, &dsl));
                     }
                     "note" => {
@@ -86,13 +94,13 @@ impl Extractor {
                         let mut note_content = String::new();
                         let mut dummy = false;
                         Self::node_to_dsl(node, &mut note_content, &mut dummy);
-                        let dsl = format!("^{{{}}}", note_content);
+                        let dsl = format!("^{{{}}}", note_content.trim());
                         segments.push(self.extract_inline_element(node, &dsl));
                     }
                     "am" => {
                         // Abbreviation marker - extract entity name
                         let content = node.get_content();
-                        let dsl = format!(":{}:", content);
+                        let dsl = format!(":{}:", content.trim());
                         segments.push(self.extract_inline_element(node, &dsl));
                     }
                     _ => {
@@ -343,7 +351,35 @@ impl Extractor {
         while let Some(c) = child {
             match c.get_type() {
                 Some(NodeType::TextNode) => {
-                    output.push_str(&c.get_content());
+                    let content = c.get_content();
+                    let normalized = content.split_whitespace().collect::<Vec<_>>().join(" ");
+                    if normalized.is_empty() {
+                        // Ignore pure whitespace
+                    } else {
+                        let has_leading = content
+                            .chars()
+                            .next()
+                            .map(|ch| ch.is_whitespace())
+                            .unwrap_or(false);
+                        let has_trailing = content
+                            .chars()
+                            .last()
+                            .map(|ch| ch.is_whitespace())
+                            .unwrap_or(false);
+
+                        if has_leading && !output.is_empty() && !output.ends_with(' ') {
+                            output.push(' ');
+                        }
+
+                        output.push_str(&normalized);
+
+                        if has_trailing {
+                            let next = c.get_next_sibling();
+                            if next.is_some() && !output.ends_with(' ') {
+                                output.push(' ');
+                            }
+                        }
+                    }
                 }
                 Some(NodeType::ElementNode) => {
                     let name = helpers::local_name(&c);

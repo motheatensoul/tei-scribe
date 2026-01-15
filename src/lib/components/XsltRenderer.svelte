@@ -55,6 +55,11 @@
             // Prepare the XML content
             let xmlContent = content;
 
+            // Strip DOCTYPE/entity declarations (not supported by DOMParser)
+            xmlContent = xmlContent
+                .replace(/<!DOCTYPE[\s\S]*?\]>\s*/gi, '')
+                .replace(/<!DOCTYPE[^>]*>\s*/gi, '');
+
             // Replace entity references with placeholders to avoid XML parsing errors
             const entityPattern = /&([a-zA-Z][a-zA-Z0-9]*);/g;
             const entityMap = new Map<string, string>();

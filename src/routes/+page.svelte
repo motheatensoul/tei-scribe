@@ -855,6 +855,11 @@
 
         // Replace entity references with placeholders to avoid XML parsing errors
         let processedXml = xmlContent;
+
+        // Strip DOCTYPE/entity declarations (not supported by DOMParser)
+        processedXml = processedXml
+            .replace(/<!DOCTYPE[\s\S]*?\]>\s*/gi, "")
+            .replace(/<!DOCTYPE[^>]*>\s*/gi, "");
         const entityPattern = /&([a-zA-Z][a-zA-Z0-9]*);/g;
         const entityMap = new Map<string, string>();
         let entityCounter = 0;
