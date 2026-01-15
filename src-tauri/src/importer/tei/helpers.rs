@@ -100,6 +100,16 @@ fn serialize_node_internal(node: &Node, output: &mut String) {
             output.push_str(&node.get_content());
             output.push_str("]]>");
         }
+        Some(NodeType::EntityRefNode) => {
+            let name = node.get_name();
+            if !name.is_empty() {
+                output.push('&');
+                output.push_str(&name);
+                output.push(';');
+            } else {
+                output.push_str(&escape_xml_text(&node.get_content()));
+            }
+        }
         _ => {}
     }
 }

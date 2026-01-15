@@ -1,3 +1,4 @@
+use crate::importer::tei::extraction::segments_to_dsl;
 use crate::importer::tei::helpers;
 use crate::importer::tei::segments::Segment;
 use crate::parser::{Compiler, Lexer, Node, WordTokenizer};
@@ -16,6 +17,12 @@ pub enum PatchOperation {
 }
 
 pub fn compute_patches(segments: &[Segment], edited_dsl: &str) -> Vec<PatchOperation> {
+    // Fast-path: if the edited DSL matches the original extraction, keep everything.
+    let original_dsl = segments_to_dsl(segments);
+    if original_dsl.trim() == edited_dsl.trim() {
+        return Vec::new();
+    }
+
     let original_tokens = extract_tokens_from_segments(segments);
     let edited_tokens = parse_dsl_to_tokens(edited_dsl);
 
@@ -35,18 +42,22 @@ fn extract_tokens_from_segments(segments: &[Segment]) -> Vec<TokenInfo> {
             Segment::Word {
                 id, dsl_content, ..
             } => {
-                tokens.push(TokenInfo {
-                    content: dsl_content.clone(),
-                    segment_id: Some(*id),
-                });
+                if !dsl_content.trim().is_empty() {
+                    tokens.push(TokenInfo {
+                        content: dsl_content.clone(),
+                        segment_id: Some(*id),
+                    });
+                }
             }
             Segment::Punctuation {
                 id, dsl_content, ..
             } => {
-                tokens.push(TokenInfo {
-                    content: dsl_content.clone(),
-                    segment_id: Some(*id),
-                });
+                if !dsl_content.trim().is_empty() {
+                    tokens.push(TokenInfo {
+                        content: dsl_content.clone(),
+                        segment_id: Some(*id),
+                    });
+                }
             }
             Segment::LineBreak { id, attributes } => {
                 let n = attributes.get("n");
@@ -305,6 +316,7 @@ fn reconstruct_from_segments_and_patches(
                 | Segment::PageBreak { .. }
         ) {
             let seg_id = seg.id();
+            let mut handled = false;
 
             // Interleave leading insertions
             while current_patch_idx < patches.len() {
@@ -341,21 +353,21 @@ fn reconstruct_from_segments_and_patches(
                                 _ => unreachable!(),
                             }
                             current_patch_idx += 1;
+                            handled = true;
                             break; // Finished this segment
                         } else {
                             // This patch belongs to a later segment.
-                            // But what if we somehow skipped some patches?
-                            // Stay aligned by breaking and trying next seg.
                             break;
                         }
                     }
                 }
             }
+
+            if !handled {
+                xml.push_str(&serialize_original_segment(seg));
+            }
         } else {
             // Structural or whitespace segment
-            // We should still check for insertions before structural segments!
-            // But only if LCS produced them before some anchors.
-            // Actually, just push the original.
             xml.push_str(&serialize_original_segment(seg));
         }
     }

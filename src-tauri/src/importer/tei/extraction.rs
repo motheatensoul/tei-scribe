@@ -97,14 +97,10 @@ impl Extractor {
                     }
                     _ => {
                         // Structural element
-                        let is_body = local_name == "body";
-
-                        if !is_body {
-                            segments.push(Segment::Structural {
-                                id: self.next_id(),
-                                xml: self.open_tag(node),
-                            });
-                        }
+                        segments.push(Segment::Structural {
+                            id: self.next_id(),
+                            xml: self.open_tag(node),
+                        });
 
                         let mut child = node.get_first_child();
                         while let Some(c) = child {
@@ -112,12 +108,10 @@ impl Extractor {
                             child = c.get_next_sibling();
                         }
 
-                        if !is_body {
-                            segments.push(Segment::Structural {
-                                id: self.next_id(),
-                                xml: format!("</{}>", node.get_name()),
-                            });
-                        }
+                        segments.push(Segment::Structural {
+                            id: self.next_id(),
+                            xml: format!("</{}>", node.get_name()),
+                        });
                     }
                 }
             }
@@ -132,13 +126,11 @@ impl Extractor {
                 } else {
                     // Split text into words separated by whitespace
                     // This handles cases like "word1  word2\n\nword3\tword4"
-                    let mut chars = content.chars().peekable();
                     let mut current_word = String::new();
-                    let mut at_start = true;
+                    let mut current_ws = String::new();
 
-                    while let Some(c) = chars.next() {
+                    for c in content.chars() {
                         if c.is_whitespace() {
-                            // Flush current word if any
                             if !current_word.is_empty() {
                                 segments.push(Segment::Word {
                                     id: self.next_id(),
@@ -148,26 +140,20 @@ impl Extractor {
                                     has_inline_lb: false,
                                 });
                                 current_word.clear();
-                                at_start = false;
                             }
-                            // Add whitespace segment (only one, normalized)
-                            // Skip consecutive whitespace
-                            while chars.peek().map(|c| c.is_whitespace()).unwrap_or(false) {
-                                chars.next();
-                            }
-                            // Only add whitespace if there's more content after
-                            if chars.peek().is_some() || !at_start {
+                            current_ws.push(c);
+                        } else {
+                            if !current_ws.is_empty() {
                                 segments.push(Segment::Whitespace {
                                     id: self.next_id(),
-                                    content: " ".to_string(),
+                                    content: current_ws.clone(),
                                 });
+                                current_ws.clear();
                             }
-                        } else {
                             current_word.push(c);
                         }
                     }
 
-                    // Flush final word if any
                     if !current_word.is_empty() {
                         segments.push(Segment::Word {
                             id: self.next_id(),
@@ -175,6 +161,13 @@ impl Extractor {
                             attributes: HashMap::new(),
                             dsl_content: current_word,
                             has_inline_lb: false,
+                        });
+                    }
+
+                    if !current_ws.is_empty() {
+                        segments.push(Segment::Whitespace {
+                            id: self.next_id(),
+                            content: current_ws,
                         });
                     }
                 }
@@ -383,14 +376,12 @@ impl Extractor {
                             }
                         }
                         "am" => {
-                            let content = c.get_content();
-                            if content.starts_with('&') && content.ends_with(';') {
-                                output.push(':');
-                                output.push_str(&content[1..content.len() - 1]);
-                                output.push(':');
-                            } else {
-                                Self::node_to_dsl(&c, output, has_inline_lb);
-                            }
+                            output.push(':');
+                            output.push_str(&c.get_content());
+                            output.push(':');
+                        }
+                        "c" => {
+                            output.push_str(&c.get_content());
                         }
                         "add" => {
                             output.push_str("+{");
