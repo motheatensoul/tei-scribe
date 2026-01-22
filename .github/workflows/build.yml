@@ -46,12 +46,26 @@ jobs:
         if: matrix.platform == 'windows-latest'
         run: |
           vcpkg integrate install
-          vcpkg install libxml2:x64-windows
-          echo "VCPKGRS_DYNAMIC=1" >> $env:GITHUB_ENV
+          vcpkg install libxml2:x64-windows-static-md
           echo "VCPKG_ROOT=$env:VCPKG_INSTALLATION_ROOT" >> $env:GITHUB_ENV
-          if (Test-Path "$env:VCPKG_INSTALLATION_ROOT/installed/x64-windows/include/libxml2/libxml") {
-            Copy-Item -Recurse "$env:VCPKG_INSTALLATION_ROOT/installed/x64-windows/include/libxml2/libxml" "$env:VCPKG_INSTALLATION_ROOT/installed/x64-windows/include/"
+          $vcpkgInstalled = "$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows-static-md"
+          echo "LIBXML2_DIR=$vcpkgInstalled" >> $env:GITHUB_ENV
+          # Set linker search paths for MSVC
+          echo "LIB=$vcpkgInstalled\lib;$env:LIB" >> $env:GITHUB_ENV
+          echo "INCLUDE=$vcpkgInstalled\include;$vcpkgInstalled\include\libxml2;$env:INCLUDE" >> $env:GITHUB_ENV
+          # Also set for pkg-config style discovery
+          echo "LIBXML2_INCLUDE_DIR=$vcpkgInstalled\include\libxml2" >> $env:GITHUB_ENV
+          echo "LIBXML2_LIB_DIR=$vcpkgInstalled\lib" >> $env:GITHUB_ENV
+          # Create xml2.lib alias if libxml2.lib exists (some crates expect this name)
+          $libxml2Lib = "$vcpkgInstalled\lib\libxml2.lib"
+          $xml2Lib = "$vcpkgInstalled\lib\xml2.lib"
+          if ((Test-Path $libxml2Lib) -and -not (Test-Path $xml2Lib)) {
+            Copy-Item $libxml2Lib $xml2Lib
+            Write-Host "Created xml2.lib alias"
           }
+          # List what was installed for debugging
+          Write-Host "Installed libraries:"
+          Get-ChildItem "$vcpkgInstalled\lib\*.lib" | ForEach-Object { Write-Host $_.Name }
         shell: pwsh
 
       - name: install frontend dependencies
