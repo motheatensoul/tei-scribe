@@ -20,20 +20,7 @@
     let containerEl: HTMLDivElement;
     let enhanceVersion = 0;
 
-    const placeholderPattern = /__ENTITY_\d+__/g;
     const yieldToMain = () => new Promise((resolve) => setTimeout(resolve, 0));
-
-    function resolveEntitiesToGlyphs(
-        text: string,
-        placeholderGlyphs: Map<string, string>
-    ): string {
-        if (!text.includes('__ENTITY_')) {
-            return text;
-        }
-        return text.replace(placeholderPattern, (placeholder) => {
-            return placeholderGlyphs.get(placeholder) ?? placeholder;
-        });
-    }
 
     function sliceTag(xml: string, tagName: string): string | null {
         const lower = xml.toLowerCase();
@@ -95,16 +82,25 @@
         })();
     });
 
-    // Transform XML when content or processor changes
+    // Transform XML when content, processor, or entities change
     let transformVersion = 0;
 
     $effect(() => {
         const processor = xslProcessor;
         const xmlContent = content;
+        // Track entity store changes so we re-transform when entities load
+        const entities = $entityStore.entities;
+        const entitiesLoaded = $entityStore.loaded;
 
         if (!processor || !xmlContent.trim()) {
             renderedHtml = '';
             isTransforming = false;
+            return;
+        }
+
+        // Don't transform until entities are loaded (to avoid showing [entityName] placeholders)
+        if (!entitiesLoaded) {
+            isTransforming = true;
             return;
         }
 
@@ -132,20 +128,22 @@
                     ? `<TEI xmlns="http://www.tei-c.org/ns/1.0" xmlns:me="http://www.menota.org/ns/1.0">${bodyFragment}</TEI>`
                     : prepared;
 
-                // Replace entity references with placeholders to avoid XML parsing errors
+                // Replace named entity references with placeholders, then resolve after XSLT
+                // Use ASCII-safe placeholders that won't be stripped by XML/XSLT processing
                 const entityPattern = /&([a-zA-Z][a-zA-Z0-9]*);/g;
-                const placeholderGlyphs = new Map<string, string>();
+                const placeholderMap = new Map<string, string>();
                 let entityCounter = 0;
-                const entities = $entityStore.entities;
 
                 prepared = xmlFragment.replace(entityPattern, (match, name) => {
-                    // Skip standard XML entities
+                    // Skip standard XML entities - these must remain as entities
                     if (['lt', 'gt', 'amp', 'quot', 'apos'].includes(name)) {
                         return match;
                     }
-                    const placeholder = `__ENTITY_${entityCounter}__`;
-                    const glyph = entities[name]?.char || `[${name}]`;
-                    placeholderGlyphs.set(placeholder, glyph);
+                    const entity = entities[name];
+                    // Use format like XENT0X, XENT1X - letters+numbers only
+                    const placeholder = `XENT${entityCounter}X`;
+                    const glyph = entity?.char || `[${name}]`;
+                    placeholderMap.set(placeholder, glyph);
                     entityCounter++;
                     return placeholder;
                 });
@@ -183,8 +181,13 @@
                 // Get the HTML content
                 let html = resultDoc.documentElement.outerHTML;
 
-                // Resolve entity placeholders to actual glyphs
-                html = resolveEntitiesToGlyphs(html, placeholderGlyphs);
+                // Resolve placeholders to actual glyphs
+                // Placeholders are formatted as XENT{number}X
+                const placeholderRegex = /XENT(\d+)X/g;
+                html = html.replace(placeholderRegex, (match) => {
+                    const glyph = placeholderMap.get(match);
+                    return glyph ?? match;
+                });
 
                 if (version !== transformVersion) return;
                 renderedHtml = html;
@@ -263,7 +266,7 @@
     });
 </script>
 
-<div class="xslt-rendered p-4 font-serif text-lg leading-loose" bind:this={containerEl}>
+<div class="xslt-rendered p-4 text-lg leading-loose" bind:this={containerEl}>
     {#if error}
         <div class="alert alert-error">
             <span>{error}</span>
@@ -296,6 +299,11 @@
 <style>
     .xslt-rendered {
         font-family: 'Junicode', Georgia, serif;
+    }
+
+    /* Ensure the prose container inherits Junicode for PUA character support */
+    .xslt-rendered :global(.prose) {
+        font-family: inherit;
     }
 
     /* Word styling - mirrors RenderedText.svelte */
@@ -342,5 +350,36 @@
         border-color: var(--color-warning);
         background-color: color-mix(in oklch, var(--color-warning) 15%, transparent);
         opacity: 1;
+    }
+
+    /* Character elements (<c>) - ensure Junicode font for PUA characters */
+    .xslt-rendered :global(.char) {
+        font-family: 'Junicode', Georgia, serif;
+    }
+
+    /* Initial capitals - typically larger */
+    .xslt-rendered :global(.char-initial) {
+        font-size: 1.5em;
+        line-height: 1;
+        vertical-align: baseline;
+    }
+
+    /* Handle rend attributes with specific colors */
+    .xslt-rendered :global(.char[data-rend*="cBlue"]) {
+        color: var(--color-info);
+    }
+
+    .xslt-rendered :global(.char[data-rend*="cRed"]) {
+        color: var(--color-error);
+    }
+
+    .xslt-rendered :global(.char[data-rend*="cGreen"]) {
+        color: var(--color-success);
+    }
+
+    /* Abbreviation markers (<am>) and expansions (<ex>) - ensure Junicode font for PUA characters */
+    .xslt-rendered :global(.abbr-marker),
+    .xslt-rendered :global(.abbr-expansion) {
+        font-family: 'Junicode', Georgia, serif;
     }
 </style>

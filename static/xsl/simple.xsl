@@ -9,7 +9,7 @@
 
     <!-- Root -->
     <xsl:template match="/">
-        <div class="prose max-w-none font-serif leading-loose">
+        <div class="prose max-w-none leading-loose">
             <xsl:apply-templates/>
         </div>
     </xsl:template>
@@ -72,40 +72,15 @@
 
     <!-- Word elements with MENOTA multi-level structure -->
     <xsl:template match="tei:w | w">
-        <!-- Note: word index is assigned by JavaScript post-processing, not XSLT -->
-        <!-- Using count(preceding::...) here would be O(n²) and cause hangs on large documents -->
-        <!-- Get facsimile text: prefer me:facs, then facs, otherwise whole content -->
-        <xsl:variable name="facsText">
-            <xsl:choose>
-                <xsl:when test=".//me:facs">
-                    <xsl:value-of select=".//me:facs"/>
-                </xsl:when>
-                <xsl:when test=".//*[local-name()='facs']">
-                    <xsl:value-of select=".//*[local-name()='facs']"/>
-                </xsl:when>
-                <xsl:otherwise>
-                    <xsl:value-of select="."/>
-                </xsl:otherwise>
-            </xsl:choose>
-        </xsl:variable>
-        <!-- Get diplomatic text: prefer me:dipl, then dipl, fallback to facs -->
-        <xsl:variable name="diplText">
-            <xsl:choose>
-                <xsl:when test=".//me:dipl">
-                    <xsl:value-of select=".//me:dipl"/>
-                </xsl:when>
-                <xsl:when test=".//*[local-name()='dipl']">
-                    <xsl:value-of select=".//*[local-name()='dipl']"/>
-                </xsl:when>
-                <xsl:otherwise>
-                    <xsl:value-of select="$facsText"/>
-                </xsl:otherwise>
-            </xsl:choose>
-        </xsl:variable>
+        <!-- Get diplomatic text for data attribute - use string() to get all descendant text -->
+        <xsl:variable name="diplText" select="string(.//me:dipl | .//*[local-name()='dipl'])"/>
+        <xsl:variable name="facsText" select="string(.//me:facs | .//*[local-name()='facs'])"/>
+        <xsl:variable name="normText" select="string(.//me:norm | .//*[local-name()='norm'])"/>
 
         <span class="word"
               data-word-index="0"
-              data-diplomatic="{normalize-space($diplText)}">
+              data-diplomatic="{normalize-space($diplText)}"
+              data-facsimile="{normalize-space($facsText)}">
             <xsl:if test="@lemma">
                 <xsl:attribute name="title">
                     <xsl:value-of select="@lemma"/>
@@ -116,40 +91,76 @@
                     </xsl:if>
                 </xsl:attribute>
             </xsl:if>
-            <xsl:value-of select="normalize-space($facsText)"/>
-        </span>
-        <xsl:text> </xsl:text>
-    </xsl:template>
-
-    <!-- Punctuation -->
-    <xsl:template match="tei:pc | pc">
-        <xsl:variable name="facsText">
+            <!-- Use apply-templates to preserve <c> element structure for styling -->
             <xsl:choose>
-                <xsl:when test=".//me:facs">
-                    <xsl:value-of select=".//me:facs"/>
+                <xsl:when test="normalize-space($facsText)">
+                    <xsl:apply-templates select="(.//me:facs | .//*[local-name()='facs'])[1]/node()" mode="word-content"/>
                 </xsl:when>
-                <xsl:when test=".//*[local-name()='facs']">
-                    <xsl:value-of select=".//*[local-name()='facs']"/>
+                <xsl:when test="normalize-space($diplText)">
+                    <xsl:apply-templates select="(.//me:dipl | .//*[local-name()='dipl'])[1]/node()" mode="word-content"/>
                 </xsl:when>
-                <xsl:when test=".//me:dipl">
-                    <xsl:value-of select=".//me:dipl"/>
-                </xsl:when>
-                <xsl:when test=".//*[local-name()='dipl']">
-                    <xsl:value-of select=".//*[local-name()='dipl']"/>
-                </xsl:when>
-                <xsl:when test=".//me:norm">
-                    <xsl:value-of select=".//me:norm"/>
-                </xsl:when>
-                <xsl:when test=".//*[local-name()='norm']">
-                    <xsl:value-of select=".//*[local-name()='norm']"/>
+                <xsl:when test="normalize-space($normText)">
+                    <xsl:apply-templates select="(.//me:norm | .//*[local-name()='norm'])[1]/node()" mode="word-content"/>
                 </xsl:when>
                 <xsl:otherwise>
                     <xsl:value-of select="."/>
                 </xsl:otherwise>
             </xsl:choose>
-        </xsl:variable>
+        </span>
+        <xsl:text> </xsl:text>
+    </xsl:template>
+
+    <!-- Mode for extracting word content including from nested elements like <c> -->
+    <!-- Default: pass through to children -->
+    <xsl:template match="*" mode="word-content">
+        <xsl:apply-templates mode="word-content"/>
+    </xsl:template>
+
+    <!-- Character elements: preserve as styled spans for initials, colors, etc. -->
+    <xsl:template match="tei:c | c" mode="word-content">
+        <span class="char">
+            <xsl:if test="@type">
+                <xsl:attribute name="data-type"><xsl:value-of select="@type"/></xsl:attribute>
+                <xsl:attribute name="class">char char-<xsl:value-of select="@type"/></xsl:attribute>
+            </xsl:if>
+            <xsl:if test="@rend">
+                <xsl:attribute name="data-rend"><xsl:value-of select="@rend"/></xsl:attribute>
+            </xsl:if>
+            <xsl:apply-templates mode="word-content"/>
+        </span>
+    </xsl:template>
+
+    <!-- Text nodes: output directly -->
+    <xsl:template match="text()" mode="word-content">
+        <xsl:value-of select="."/>
+    </xsl:template>
+
+    <!-- Punctuation -->
+    <xsl:template match="tei:pc | pc">
         <span class="punctuation">
-            <xsl:value-of select="normalize-space($facsText)"/>
+            <xsl:choose>
+                <xsl:when test="normalize-space(.//me:facs)">
+                    <xsl:apply-templates select=".//me:facs[1]/node()" mode="word-content"/>
+                </xsl:when>
+                <xsl:when test="normalize-space(.//*[local-name()='facs'])">
+                    <xsl:apply-templates select=".//*[local-name()='facs'][1]/node()" mode="word-content"/>
+                </xsl:when>
+                <xsl:when test="normalize-space(.//me:dipl)">
+                    <xsl:apply-templates select=".//me:dipl[1]/node()" mode="word-content"/>
+                </xsl:when>
+                <xsl:when test="normalize-space(.//*[local-name()='dipl'])">
+                    <xsl:apply-templates select=".//*[local-name()='dipl'][1]/node()" mode="word-content"/>
+                </xsl:when>
+                <xsl:when test="normalize-space(.//me:norm)">
+                    <xsl:apply-templates select=".//me:norm[1]/node()" mode="word-content"/>
+                </xsl:when>
+                <xsl:when test="normalize-space(.//*[local-name()='norm'])">
+                    <xsl:apply-templates select=".//*[local-name()='norm'][1]/node()" mode="word-content"/>
+                </xsl:when>
+                <xsl:otherwise>
+                    <xsl:value-of select="."/>
+                </xsl:otherwise>
+            </xsl:choose>
         </span>
         <xsl:text> </xsl:text>
     </xsl:template>
@@ -189,9 +200,26 @@
     <!-- Choices (Abbr/Expan) -->
     <xsl:template match="tei:choice | choice">
         <xsl:choose>
-            <!-- If this choice has facs/dipl/norm, show facs content -->
-            <xsl:when test=".//me:facs | .//*[local-name()='facs']">
-                <xsl:value-of select=".//me:facs | .//*[local-name()='facs']"/>
+            <!-- If this choice has facs with content, show it -->
+            <xsl:when test="normalize-space(.//me:facs)">
+                <xsl:apply-templates select=".//me:facs[1]/node()" mode="word-content"/>
+            </xsl:when>
+            <xsl:when test="normalize-space(.//*[local-name()='facs'])">
+                <xsl:apply-templates select=".//*[local-name()='facs'][1]/node()" mode="word-content"/>
+            </xsl:when>
+            <!-- Fall back to dipl if facs is empty -->
+            <xsl:when test="normalize-space(.//me:dipl)">
+                <xsl:apply-templates select=".//me:dipl[1]/node()" mode="word-content"/>
+            </xsl:when>
+            <xsl:when test="normalize-space(.//*[local-name()='dipl'])">
+                <xsl:apply-templates select=".//*[local-name()='dipl'][1]/node()" mode="word-content"/>
+            </xsl:when>
+            <!-- Fall back to norm if dipl is also empty -->
+            <xsl:when test="normalize-space(.//me:norm)">
+                <xsl:apply-templates select=".//me:norm[1]/node()" mode="word-content"/>
+            </xsl:when>
+            <xsl:when test="normalize-space(.//*[local-name()='norm'])">
+                <xsl:apply-templates select=".//*[local-name()='norm'][1]/node()" mode="word-content"/>
             </xsl:when>
             <!-- Otherwise show abbreviation with hover expansion -->
             <xsl:when test="tei:abbr | abbr">
@@ -231,37 +259,28 @@
     </xsl:template>
 
     <!-- MENOTA-specific: Character elements -->
+    <!-- <c> elements just pass through their text content -->
     <xsl:template match="tei:c | c">
-        <xsl:choose>
-            <xsl:when test=".//me:facs">
-                <xsl:value-of select=".//me:facs"/>
-            </xsl:when>
-            <xsl:when test=".//*[local-name()='facs']">
-                <xsl:value-of select=".//*[local-name()='facs']"/>
-            </xsl:when>
-            <xsl:otherwise>
-                <xsl:value-of select="."/>
-            </xsl:otherwise>
-        </xsl:choose>
+        <xsl:value-of select="."/>
     </xsl:template>
 
-    <!-- MENOTA level elements: show facs by default, hide others -->
+    <!-- MENOTA level elements: apply templates to children to process <c> elements etc. -->
     <xsl:template match="me:facs | *[local-name()='facs']">
-        <xsl:value-of select="."/>
+        <xsl:apply-templates/>
     </xsl:template>
 
     <xsl:template match="me:dipl | me:norm | *[local-name()='dipl'] | *[local-name()='norm']">
         <!-- Hidden by default -->
     </xsl:template>
 
-    <!-- Abbreviation markers: show content -->
+    <!-- Abbreviation markers: wrap in span for consistent font styling -->
     <xsl:template match="me:am | *[local-name()='am']">
-        <xsl:value-of select="."/>
+        <span class="abbr-marker"><xsl:value-of select="."/></span>
     </xsl:template>
 
-    <!-- Expansion markers: show content -->
+    <!-- Expansion markers: wrap in span for consistent font styling -->
     <xsl:template match="me:ex | *[local-name()='ex']">
-        <xsl:value-of select="."/>
+        <span class="abbr-expansion"><xsl:value-of select="."/></span>
     </xsl:template>
 
     <!-- Catch-all for unhandled elements: just process children -->
