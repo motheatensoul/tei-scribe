@@ -3,11 +3,12 @@
 	themes: caramellatte --default, coffee --prefersdark;
 }
 
-/* Junicode font for MENOTA/MUFI medieval characters */
+/* Junicode variable font for MENOTA/MUFI medieval characters */
+/* The variable font supports weight range 300-700, width 75-125, and ENLA axis */
 @font-face {
 	font-family: 'Junicode';
 	src: url('/fonts/Junicode.woff2') format('woff2');
-	font-weight: normal;
+	font-weight: 300 700; /* Variable font weight range */
 	font-style: normal;
 	font-display: swap;
 }
@@ -15,7 +16,7 @@
 @font-face {
 	font-family: 'Junicode';
 	src: url('/fonts/JunicodeVF-Italic.woff2') format('woff2');
-	font-weight: normal;
+	font-weight: 300 700; /* Variable font weight range */
 	font-style: italic;
 	font-display: swap;
 }
