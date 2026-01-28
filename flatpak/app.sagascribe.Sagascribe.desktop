@@ -1,0 +1,12 @@
+[Desktop Entry]
+Name=Saga Scribe
+Comment=TEI-XML manuscript transcription editor with custom DSL shorthand
+GenericName=Manuscript Transcription Editor
+Categories=Office;TextEditor;Education;Literature;
+Keywords=TEI;XML;transcription;manuscript;MENOTA;DSL;Old Norse;
+Exec=saga-scribe %f
+Icon=app.sagascribe.Sagascribe
+StartupWMClass=saga-scribe
+Terminal=false
+Type=Application
+MimeType=application/xml;text/xml;

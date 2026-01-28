@@ -1,0 +1,37 @@
+app-id: app.sagascribe.Sagascribe
+runtime: org.gnome.Platform
+runtime-version: '49'
+sdk: org.gnome.Sdk
+command: saga-scribe
+
+finish-args:
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --share=ipc
+  - --device=dri
+  - --share=network
+  - --filesystem=home
+  - --filesystem=xdg-documents
+  - --filesystem=xdg-download
+  - --talk-name=org.freedesktop.Notifications
+  - --talk-name=org.gtk.vfs.*
+  - --filesystem=xdg-run/gvfsd
+
+modules:
+  - name: saga-scribe
+    buildsystem: simple
+    build-commands:
+      - install -Dm755 saga-scribe ${FLATPAK_DEST}/bin/saga-scribe
+      - mkdir -p ${FLATPAK_DEST}/share/saga-scribe
+      - cp -r entities ${FLATPAK_DEST}/share/saga-scribe/
+      - cp -r normalizer ${FLATPAK_DEST}/share/saga-scribe/
+      - cp -r dictionary ${FLATPAK_DEST}/share/saga-scribe/
+      - cp -r schemas ${FLATPAK_DEST}/share/saga-scribe/
+      - install -Dm644 app.sagascribe.Sagascribe.desktop ${FLATPAK_DEST}/share/applications/app.sagascribe.Sagascribe.desktop
+      - install -Dm644 app.sagascribe.Sagascribe.metainfo.xml ${FLATPAK_DEST}/share/metainfo/app.sagascribe.Sagascribe.metainfo.xml
+      - install -Dm644 icon-512.png ${FLATPAK_DEST}/share/icons/hicolor/512x512/apps/app.sagascribe.Sagascribe.png
+      - install -Dm644 icon-256.png ${FLATPAK_DEST}/share/icons/hicolor/256x256/apps/app.sagascribe.Sagascribe.png
+      - install -Dm644 icon-128.png ${FLATPAK_DEST}/share/icons/hicolor/128x128/apps/app.sagascribe.Sagascribe.png
+    sources:
+      - type: dir
+        path: .
